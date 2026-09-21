@@ -1,0 +1,217 @@
+# -*- coding: utf-8 -*-
+"""时间序列分析：数据折线 / 时序分解 / ACF·PACF / ARIMA 建模与预测。
+
+统计引擎用 statsmodels，界面全中文，面向不懂代码的学生。
+"""
+
+import numpy as np
+import matplotlib
+matplotlib.use("TkAgg")
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
+import customtkinter as ctk
+
+plt.rcParams["font.sans-serif"] = ["Microsoft YaHei", "SimHei", "DejaVu Sans"]
+plt.rcParams["axes.unicode_minus"] = False
+
+OPS = ["原始数据折线", "时序分解（趋势/季节/残差）", "自相关 ACF 与偏自相关 PACF", "ARIMA 建模与预测"]
+
+
+def nums(text):
+    s = text.replace(",", " ").replace("，", " ").replace("；", " ").replace("\n", " ").strip()
+    return [float(x) for x in s.split()]
+
+
+def _sample_series():
+    """生成 24 期带趋势和季节性的演示数据。"""
+    t = np.arange(24.0)
+    y = 20.0 + 0.5 * t + 2.0 * np.sin(t * 2.0 * np.pi / 4.0)
+    return " ".join(f"{v:.1f}" for v in y)
+
+
+class TimeSeriesPage(ctk.CTkFrame):
+    def __init__(self, master):
+        super().__init__(master, fg_color="transparent")
+        self.grid_columnconfigure(1, weight=1)
+        self.grid_rowconfigure(0, weight=1)
+
+        # ================= 左：参数 =================
+        left = ctk.CTkScrollableFrame(self, width=390, corner_radius=12, label_text="时间序列")
+        left.grid(row=0, column=0, sticky="nsew", padx=12, pady=12)
+        left.grid_columnconfigure(0, weight=1)
+
+        ctk.CTkLabel(left, text="时序数据（空格/逗号/换行分隔，一列数值）", font=ctk.CTkFont(size=12)).grid(
+            row=0, column=0, sticky="w", padx=14, pady=(8, 2))
+        self.data = ctk.CTkTextbox(left, height=110, font=ctk.CTkFont(family="Consolas", size=12))
+        self.data.grid(row=1, column=0, sticky="ew", padx=12, pady=(0, 6))
+        self.data.insert("1.0", _sample_series())
+
+        ctk.CTkLabel(left, text="操作", font=ctk.CTkFont(size=12)).grid(
+            row=2, column=0, sticky="w", padx=14, pady=(4, 2))
+        self.op = ctk.CTkOptionMenu(left, values=OPS)
+        self.op.grid(row=3, column=0, sticky="ew", padx=12)
+        self.op.set(OPS[1])
+
+        ctk.CTkLabel(left, text="周期（季节长度，分解用，如 4=季度 12=月度）", font=ctk.CTkFont(size=12)).grid(
+            row=4, column=0, sticky="w", padx=14, pady=(8, 2))
+        self.period = ctk.CTkEntry(left, height=32)
+        self.period.grid(row=5, column=0, sticky="ew", padx=12)
+        self.period.insert(0, "4")
+
+        ctk.CTkLabel(left, text="ARIMA 阶数 p d q（空格分隔，如 1 1 1）", font=ctk.CTkFont(size=12)).grid(
+            row=6, column=0, sticky="w", padx=14, pady=(8, 2))
+        self.order = ctk.CTkEntry(left, height=32)
+        self.order.grid(row=7, column=0, sticky="ew", padx=12)
+        self.order.insert(0, "1 1 1")
+
+        ctk.CTkLabel(left, text="预测期数", font=ctk.CTkFont(size=12)).grid(
+            row=8, column=0, sticky="w", padx=14, pady=(8, 2))
+        self.horizon = ctk.CTkEntry(left, height=32)
+        self.horizon.grid(row=9, column=0, sticky="ew", padx=12)
+        self.horizon.insert(0, "6")
+
+        ctk.CTkButton(left, text="⚡ 分 析", height=42, command=self._run).grid(
+            row=10, column=0, sticky="ew", padx=12, pady=(10, 4))
+
+        tip = ("说明：\n"
+               "· 分解：把序列拆成 趋势 + 季节 + 残差 三张子图；\n"
+               "· ACF/PACF：看图判断适合的 ARIMA 阶数（截尾/拖尾）；\n"
+               "· ARIMA：输入 (p,d,q) 阶数自动拟合并外推预测；\n"
+               "· 数据太少（< 2 个周期）分解会失败，请加长序列。")
+        ctk.CTkLabel(left, text=tip, justify="left", font=ctk.CTkFont(size=11),
+                     text_color="gray45", anchor="w", wraplength=360).grid(
+            row=11, column=0, sticky="w", padx=14, pady=(6, 12))
+
+        # ================= 右：结果 + 画布 =================
+        right = ctk.CTkFrame(self, corner_radius=12)
+        right.grid(row=0, column=1, sticky="nsew", padx=(0, 12), pady=12)
+        right.grid_columnconfigure(0, weight=1)
+        right.grid_rowconfigure(1, weight=1)
+
+        ctk.CTkLabel(right, text="分析结果", font=ctk.CTkFont(size=14, weight="bold")).grid(
+            row=0, column=0, sticky="w", padx=16, pady=(12, 4))
+        self.out = ctk.CTkTextbox(right, font=ctk.CTkFont(family="Consolas", size=13))
+        self.out.grid(row=1, column=0, sticky="nsew", padx=16, pady=(0, 4))
+
+        box = ctk.CTkFrame(right, fg_color="transparent")
+        box.grid(row=2, column=0, sticky="nsew", padx=16, pady=(4, 4))
+        box.grid_rowconfigure(0, weight=1)
+        box.grid_columnconfigure(0, weight=1)
+        self.figure = plt.Figure(figsize=(7, 4.6), dpi=100)
+        self.ax = self.figure.add_subplot(111)
+        self.canvas = FigureCanvasTkAgg(self.figure, master=box)
+        self.canvas.get_tk_widget().pack(side="top", fill="both", expand=1)
+        toolbar = NavigationToolbar2Tk(self.canvas, box)
+        toolbar.update()
+        toolbar.pack(side="bottom", fill="x")
+        self.ax.set_title("时序图形")
+        self.canvas.draw()
+
+    def _msg(self, s):
+        self.out.configure(state="normal")
+        self.out.insert("end", s + "\n")
+        self.out.see("end")
+        self.out.configure(state="disabled")
+
+    def _clear_out(self):
+        self.out.configure(state="normal")
+        self.out.delete("1.0", "end")
+        self.out.configure(state="disabled")
+
+    def _get_y(self):
+        v = nums(self.data.get("1.0", "end"))
+        if len(v) < 8:
+            raise ValueError("数据点太少（至少 8 个）。")
+        return np.array(v, dtype=float)
+
+    def _run(self):
+        self._clear_out()
+        op = self.op.get()
+        try:
+            y = self._get_y()
+            if op == OPS[0]:
+                self._plot_raw(y)
+            elif op == OPS[1]:
+                self._decompose(y)
+            elif op == OPS[2]:
+                self._acf_pacf(y)
+            elif op == OPS[3]:
+                self._arima(y)
+        except Exception as e:
+            self._msg(f"出错：{e}")
+        self.canvas.draw()
+        if getattr(self, "history", None):
+            self.history.log_op("时间序列", op, self.out.get("1.0", "end")[:200])
+
+    def _plot_raw(self, y):
+        self.figure.clear()
+        self.ax = self.figure.add_subplot(111)
+        self.ax.plot(y, lw=2, color="steelblue", marker="o", ms=3)
+        self.ax.set_title("原始数据")
+        self.ax.set_xlabel("期数")
+        self.ax.set_ylabel("数值")
+        self.ax.grid(True)
+        self._msg(f"共 {len(y)} 个观测点，最小值 {y.min():.4g}，最大值 {y.max():.4g}。")
+
+    def _decompose(self, y):
+        from statsmodels.tsa.seasonal import seasonal_decompose
+        per = int(float(self.period.get() or 4))
+        if len(y) < 2 * per:
+            raise ValueError(f"数据太短：需要至少 2 个周期（{2 * per} 个点），当前 {len(y)} 个。")
+        res = seasonal_decompose(y, model="additive", period=per)
+        self.figure.clear()
+        self.ax = self.figure.add_subplot(411)
+        self.ax.plot(res.observed, lw=1.6, color="k"); self.ax.set_title("观测值"); self.ax.grid(True)
+        ax2 = self.figure.add_subplot(412, sharex=self.ax)
+        ax2.plot(res.trend, lw=1.6, color="steelblue"); ax2.set_title("趋势"); ax2.grid(True)
+        ax3 = self.figure.add_subplot(413, sharex=self.ax)
+        ax3.plot(res.seasonal, lw=1.6, color="orange"); ax3.set_title("季节"); ax3.grid(True)
+        ax4 = self.figure.add_subplot(414, sharex=self.ax)
+        ax4.plot(res.resid, lw=1.6, color="crimson"); ax4.set_title("残差"); ax4.grid(True)
+        self.figure.subplots_adjust(hspace=0.45)
+        self._msg(f"分解完成（周期={per}）。趋势/季节/残差已绘制。")
+
+    def _acf_pacf(self, y):
+        from statsmodels.graphics.tsaplots import plot_acf, plot_pacf
+        self.figure.clear()
+        self.ax = self.figure.add_subplot(211)
+        plot_acf(y, lags=min(20, len(y) // 2), ax=self.ax)
+        self.ax.set_title("自相关 ACF")
+        self.ax.grid(True)
+        ax2 = self.figure.add_subplot(212)
+        plot_pacf(y, lags=min(20, len(y) // 2), ax=ax2)
+        ax2.set_title("偏自相关 PACF")
+        ax2.grid(True)
+        self.figure.subplots_adjust(hspace=0.45)
+        self._msg("ACF 拖尾 + PACF 截尾→ 适合 AR；ACF 截尾 + PACF 拖尾→ 适合 MA。")
+
+    def _arima(self, y):
+        from statsmodels.tsa.arima.model import ARIMA
+        o = [int(x) for x in self.order.get().replace("，", ",").replace(" ", ",").split(",") if x.strip()][:3]
+        while len(o) < 3:
+            o.append(0)
+        o = tuple(o)
+        steps = max(1, int(float(self.horizon.get() or 6)))
+        model = ARIMA(y, order=o)
+        fit = model.fit()
+        fc = fit.get_forecast(steps)
+        mean = fc.predicted_mean
+        ci = fc.conf_int()
+        self.figure.clear()
+        self.ax = self.figure.add_subplot(111)
+        n = len(y)
+        self.ax.plot(range(n), y, lw=2, color="steelblue", label="观测值")
+        self.ax.plot(range(n, n + steps), mean, lw=2, color="crimson", marker="o", label="预测")
+        self.ax.fill_between(range(n, n + steps), ci[:, 0], ci[:, 1], color="crimson", alpha=0.2, label="95% 置信区间")
+        self.ax.axvline(n - 0.5, color="gray", ls="--", lw=1)
+        self.ax.legend(fontsize=9)
+        self.ax.set_title(f"ARIMA{o} 拟合与预测（下 {steps} 期）")
+        self.ax.set_xlabel("期数")
+        self.ax.set_ylabel("数值")
+        self.ax.grid(True)
+        self._msg(f"ARIMA 阶数：p={o[0]}，d={o[1]}，q={o[2]}")
+        self._msg(f"AIC={fit.aic:.3g}，BIC={fit.bic:.3g}（越小越好）")
+        self._msg(f"预测 {steps} 期：{[f'{v:.3g}' for v in mean]}")
+
+    def on_show(self):
+        pass

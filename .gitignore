@@ -1,0 +1,46 @@
+# Python 字节码
+__pycache__/
+*.pyc
+*.pyo
+
+# 构建产物
+build/
+dist/
+releases/
+*.spec
+
+# 日志
+*.log
+error_log.txt
+
+# 版本号临时文件
+.version
+
+# 测试截图 / 临时图片（_mat.png 等官网截图除外）
+_*.png
+!_mat.png
+!_tree.png
+!_kmeans.png
+!_m_test*.png
+
+# 一次性修复脚本
+_fix_*.py
+
+# 大型二进制文件
+*.zip
+*.exe
+MatLite-便携版.zip
+
+# 操作系统
+Thumbs.db
+.DS_Store
+
+# 敏感文件（绝不可提交）
+.github_token
+.Rhistory
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo

@@ -1,0 +1,57 @@
+================ MatLite 新对话重建提示词 ================
+
+【项目】
+MatLite 数学工作台 —— MATLAB 风格的本地桌面数学/统计工具。
+技术栈: Python + customtkinter + matplotlib + numpy + pandas + scipy + sympy + sklearn + statsmodels + python-docx + openpyxl + requests。
+项目路径: C:\Users\19627\Desktop\MatLite
+环境: Windows 11，Git Bash，Python 3.10.6。
+
+【应用结构】
+app.py 里注册 15 个页面（都在 modules/ 目录）：
+CalculatorPage(公式计算) MatrixPage(矩阵) NumericPage(方程数值)
+CalculusPage(微积分深化) ComplexPage(复变函数) ProbPage(概率分布)
+PlotPage(绘图可视化) DataPage(数据分析) TimeSeriesPage(时间序列)
+MlPage(机器学习) AiPage(AI助手) OcrPage(拍照识题)
+HistoryPage(历史) SettingsPage(设置) HelpPage(帮助)。
+每个页面沿用“左侧参数面板 + 右侧结果/画布”，matplotlib 画布用独立 box 子框架 + pack（box 再 grid 到右框架）。
+
+【已完成（不要重做）】
+1. plot_page.py 重写：10 种图形（函数曲线/曲面/3D散点/3D空间折线/3D参数曲线/等高线/散点/折线/柱状/直方图）。
+2. 新增 four 个功能页：complex_page(复变函数) time_series_page(时序/ARIMA) ml_page(KMeans/决策树) ocr_page(拍照识题，本地 Ollama 视觉模型)。
+3. 新增 announce.py：后台线程拉公告 JSON + GitHub Releases 最新版本，去重后弹窗；设置页有开关与公告地址（仅拉取、不上传数据）。
+4. 意见反馈 feedback.py：恢复可编辑 SMTP 直发（发件邮箱/授权码/SMTP服务器/端口），未填则降级为本地保存+打开邮件程序。
+5. 帮助中心 help_page.py 已加入新功能说明与“联网/隐私”FAQ。
+6. requirements.txt 已加 scikit-learn、statsmodels。
+7. 打包体系：bump_version.py（自动版本号）、.version、打包.bat、installer.iss（Inno Setup 6，含协议页/自定义安装选项）。
+8. 素材：assets\\MatLite.ico（图标）、assets\\installer_license.txt（许可，UTF-8+BOM）、assets\\languages\\ChineseSimplified.isl。
+9. 已发布版本：releases\\v1.0.0、releases\\v1.1.0（含 MatLiteSetup.exe + 便携zip + 使用说明 + 许可）。
+
+【当前未完成任务（本会话因字面量污染被中断）】
+A. 精修三个页面布局：feedback.py(反馈对话框)、settings_page.py(设置页)、latex_view.py(矩阵渲染 matrix_to_image)。
+   - settings_page.py：请用 CTkScrollableFrame + pack，让全部设置(主题/小数位/表格行数/绘图DPI/字体缩放/公告开关+地址)都可见、可滚动。
+   - feedback.py：逻辑已对(SMTP直发+降级)，布局用 pack；核对各字段在一列内依次排列、间距均匀。
+   - latex_view.py matrix_to_image：用 ax.table 自动排格，把 figsize 设为受控小值（如 plt.Figure(figsize=(8, 14))、dpi=80），避免超大图或数字与边框重叠。
+B. 打包发布新版本到 releases\\v1.1.1：
+   版本号设为 1.1.1，python build_exe.py 重打 EXE，再用 ISCC 编译安装包，归档到 releases\\v1.1.1（复制 MatLiteSetup.exe + 安装条款 + 重写使用说明，可再加便携 zip）。
+
+【发布流程】
+1. 改 installer.iss 的 #define MyAppVersion "1.1.1"；
+2. python build_exe.py（生成 dist\\MatLite\\MatLite.exe）；
+3. "C:\Users\19627\AppData\Local\Programs\Inno Setup 6\ISCC.exe" installer.iss（生成 dist\\MatLiteSetup.exe）；
+4. 把产物归档到 releases\\v1.1.1\\ 并更新使用说明。
+
+【重要：上一会话的字面量生成异常】
+写作含数字的代码时，数字会被随机改写（如 160 变 763），导致设置/反馈/矩阵三个文件布局错乱。
+因此新对话务必：
+  * 布局用 pack / 行计数器变量(r += 1) / len(key) 派生的值，尽量少手写多位数字；
+  * 每改一个文件都 py_compile + 打开 GUI 构建测试确认；
+  * 用户的正式要求：意见反馈恢复到第一版 v1.0.0 的 SMTP 直发样式；设置页所有设置都要可见；矩阵预览不要数字与边框重叠。
+
+【验证】
+python -m py_compile modules/*.py app.py
+构建 MainApp(AccountManager()) 应能创建全部 15 页。
+
+【需要 EXE 时】
+cmd //c "python build_exe.py"（已含递归上限修复）。
+
+=========================================================================================

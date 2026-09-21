@@ -1,0 +1,46 @@
+================ MatLite 绘图页重建提示词(粘贴到新 Claude Code 会话) ================
+
+【项目】
+MatLite 数学工作台 —— MATLAB 风格的本地桌面数学/统计工具。
+技术栈: Python + customtkinter + matplotlib + numpy + pandas + scipy + sympy。
+项目路径: C:\Users\19627\Desktop\MatLite
+
+【现状】
+功能已基本完成且可用, 只有「绘图可视化」页(modules/plot_page.py)在上次会话中被脚本数字污染重写坏,
+导致页面空白、控件错位、部分绘图类型出错。其余页面(公式/矩阵/数值/微积分/概率/数据分析/AI/历史/设置/帮助)正常。
+
+【任务】干净重写 modules/plot_page.py, 恢复绘图功能, 支持以下 10 种图形(下拉框选择):
+1. y=f(x) 函数曲线(可多个函数, 用 分号 或 换行 分隔)
+2. z=f(x,y) 曲面(3D)
+3. 3D 散点图(输入 X/Y/Z 三列数据)
+4. 3D 空间折线(三列数据按序连线)
+5. 3D 参数曲线(x(t), y(t), z(t) 三个表达式 + t 范围)
+6. 等高线图(2D, 含色标)
+7. 散点图(输入 X/Y 两列)
+8. 折线图
+9. 柱状图(类别 + 数值)
+10. 直方图(数据)
+
+【布局】左侧参数面板 + 右侧画布区。
+保留: 标题输入、X轴标签、Y轴标签、显示网格勾选、画图按钮、保存图片按钮(PNG)、每次绘图自动记入历史(history.save_plot)。
+
+【重要】不要加入任何“复制图表”按钮(用户已明确放弃该功能)。
+
+【必须避免的坑(上次踩过)】
+1. pack/grid 冲突: 用 FigureCanvasTkAgg 时, 画布和 NavigationToolbar2Tk 都要放进一个【独立的 box 子框架】且【只用 pack】
+    (box 再 grid 到 right 框架)。否则启动报 “cannot use geometry manager pack inside ... which already has slaves managed by grid”。
+    正确模式: box.grid(row=0,column=0,sticky="nsew") -> canvas.get_tk_widget().pack(side="top",fill="both",expand=1)
+            -> toolbar.pack(side="bottom",fill="x")
+2. 数字污染: 上次用 len("a") 派生常量(O/T/Th...)被污染导致布局错乱。本次请用【明确普通整数】(如 340, 6, 30, 100), 不要 len 派生。
+3. f-string 引号嵌套: Python 3.10 下 r["Cramér's V"] 或 r['Cohen's d'] 语法错误; 含撇号键先取到变量再格式化。
+
+【参考】同目录 numeric_page.py / calculus_page.py 有正确的 canvas 容器模式, 可参考其结构。
+
+【验证】
+- python -m py_compile modules/plot_page.py
+- python app.py 启动, 点「绘图可视化」, 选「y=f(x) 函数曲线」点「画图」应画出 sin(x) 曲线。
+- 需 EXE 时: cmd //c "python build_exe.py"(build_exe.py 已含递归上限修复)。
+
+【其他】
+- 全局数字布局: 若其他页面出现类似污染, 用 python -m py_compile 验证, 并整块重写受影响区域。
+=========================================================================================

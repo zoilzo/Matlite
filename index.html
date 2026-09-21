@@ -1,0 +1,853 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MatLite 数学工作台 — 本地单机的数学与统计桌面软件</title>
+  <meta name="description" content="MatLite 是一款免费、本地运行的数学与统计桌面软件。公式计算、矩阵代数、微积分、概率分布、绘图可视化、数据分析、时间序列、机器学习、AI 助手、拍照识题。数据不上传，无需联网，支持 Windows 10/11。" />
+  <meta name="keywords" content="MatLite, 数学软件, 数学工作台, 统计软件, 数据分析, 矩阵计算, 微积分, 免费数学软件, 本地计算, 离线数学工具" />
+  <link rel="canonical" href="https://matlite.app/" />
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="software" />
+  <meta property="og:title" content="MatLite 数学工作台 — 本地单机数学与统计桌面软件" />
+  <meta property="og:description" content="免费、本地运行、数据不上传。公式计算 · 矩阵代数 · 微积分 · 统计 · 绘图 · 机器学习 · AI 助手。" />
+  <meta property="og:image" content="./_mat.png" />
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="MatLite 数学工作台" />
+  <meta name="twitter:description" content="本地单机的数学与统计桌面软件，完全免费，数据不上传。" />
+
+  <!-- JSON-LD Structured Data -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "MatLite 数学工作台",
+    "applicationCategory": "EducationalApplication",
+    "operatingSystem": "Windows 10/11, Windows Server 2016+",
+    "description": "本地单机的数学与统计桌面工具，包含公式计算、矩阵代数、微积分、概率统计、绘图可视化、数据分析、时间序列、机器学习、AI 助手、拍照识题等功能，全部计算在本机完成。",
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "CNY"
+    },
+    "author": {
+      "@type": "Person",
+      "name": "zoilzo"
+    },
+    "softwareVersion": "1.3.0",
+    "releaseNotes": "https://matlite.app/#versions",
+    "applicationSuite": "MatLite",
+    "screenshot": "https://matlite.app/_mat.png"
+  }
+  </script>
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: { 50: '#eef2ff', 100: '#e0e7ff', 200: '#c7d2fe', 300: '#a5b4fc', 400: '#818cf8', 500: '#6366f1', 600: '#4f46e5', 700: '#4338ca', 800: '#3730a3', 900: '#312e81' },
+          },
+          fontFamily: {
+            sans: ['-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', '"Microsoft YaHei"', '"PingFang SC"', '"Noto Sans SC"', 'sans-serif'],
+          },
+          animation: {
+            'fade-in': 'fadeIn 0.8s ease-out forwards',
+            'slide-up': 'slideUp 0.6s ease-out forwards',
+            'pulse-soft': 'pulseSoft 3s ease-in-out infinite',
+          },
+          keyframes: {
+            fadeIn: { '0%': { opacity: '0' }, '100%': { opacity: '1' } },
+            slideUp: { '0%': { opacity: '0', transform: 'translateY(30px)' }, '100%': { opacity: '1', transform: 'translateY(0)' } },
+            pulseSoft: { '0%, 100%': { opacity: '0.4' }, '50%': { opacity: '0.8' } },
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    html { scroll-behavior: smooth; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", "PingFang SC", "Noto Sans SC", sans-serif; }
+
+    /* Scroll-reveal */
+    .reveal { opacity: 0; transform: translateY(30px); transition: opacity 0.7s ease-out, transform 0.7s ease-out; }
+    .reveal.visible { opacity: 1; transform: translateY(0); }
+
+    /* Lightbox */
+    #lightbox { opacity: 0; pointer-events: none; transition: opacity 0.3s ease; }
+    #lightbox.open { opacity: 1; pointer-events: auto; }
+
+    /* FAQ details/summary */
+    details.faq-item summary::-webkit-details-marker { display: none; }
+    details.faq-item summary { cursor: pointer; list-style: none; }
+    details.faq-item[open] .faq-chevron { transform: rotate(180deg); }
+
+    /* Nav highlight */
+    .nav-link.active { color: #4f46e5; font-weight: 600; }
+
+    /* Screenshot carousel dots */
+    .dot.active { background: #4f46e5; transform: scale(1.3); }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 antialiased">
+
+<!-- ====== Nav ====== -->
+<nav id="navbar" class="fixed top-0 inset-x-0 z-50 bg-white/85 backdrop-blur-lg border-b border-slate-200/60 transition-all duration-300">
+  <div class="max-w-6xl mx-auto px-4 sm:px-6 flex items-center justify-between h-16">
+    <a href="#" class="flex items-center gap-2 text-lg sm:text-xl font-bold text-slate-900">
+      <span class="text-2xl">🧮</span>
+      <span class="hidden xs:inline">MatLite</span>
+    </a>
+    <div class="hidden md:flex items-center gap-6 text-sm font-medium text-slate-500">
+      <a href="#features" class="nav-link hover:text-indigo-600 transition-colors">功能</a>
+      <a href="#screenshots" class="nav-link hover:text-indigo-600 transition-colors">截图</a>
+      <a href="#downloads" class="nav-link hover:text-indigo-600 transition-colors">下载</a>
+      <a href="#guide" class="nav-link hover:text-indigo-600 transition-colors">安装</a>
+      <a href="#versions" class="nav-link hover:text-indigo-600 transition-colors">版本</a>
+      <a href="#faq" class="nav-link hover:text-indigo-600 transition-colors">FAQ</a>
+    </div>
+    <a href="#downloads" class="inline-flex items-center px-4 py-2 text-sm font-semibold rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 transition-all shadow-sm hover:shadow-md active:scale-95">
+      免费下载
+    </a>
+  </div>
+</nav>
+
+<!-- ====== Hero ====== -->
+<section class="relative overflow-hidden bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 min-h-[85vh] flex items-center">
+  <!-- Background decoration -->
+  <div class="absolute inset-0">
+    <div class="absolute top-20 left-10 w-72 h-72 bg-indigo-500/10 rounded-full blur-3xl animate-pulse-soft"></div>
+    <div class="absolute bottom-20 right-10 w-96 h-96 bg-violet-500/10 rounded-full blur-3xl animate-pulse-soft" style="animation-delay: 1.5s"></div>
+    <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-gradient-to-br from-indigo-400/5 to-transparent rounded-full blur-3xl"></div>
+    <!-- Grid pattern -->
+    <div class="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHZpZXdCb3g9IjAgMCA0MCA0MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cGF0aCBkPSJNMCAwaDQwdjQwSDB6IiBmaWxsPSJub25lIiBzdHJva2U9InJnYmEoOTksIDEwMiwgMjQxLCAwLjA0KSIgc3Ryb2tlLXdpZHRoPSIxIi8+PC9zdmc+')] opacity-50"></div>
+  </div>
+
+  <div class="relative max-w-6xl mx-auto px-4 sm:px-6 py-24 sm:py-32 lg:py-40 w-full">
+    <div class="max-w-3xl">
+      <!-- Version badge -->
+      <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold bg-indigo-500/15 text-indigo-300 border border-indigo-500/25 mb-6 reveal">
+        <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+        最新版 v1.3.0 · 2026-09-21
+      </div>
+
+      <h1 class="text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight text-white leading-tight reveal" style="transition-delay: 0.1s">
+        <span class="block">MatLite</span>
+        <span class="bg-gradient-to-r from-indigo-300 via-violet-300 to-fuchsia-300 bg-clip-text text-transparent">数学工作台</span>
+      </h1>
+
+      <p class="mt-5 text-lg sm:text-xl text-slate-300 max-w-2xl leading-relaxed reveal" style="transition-delay: 0.2s">
+        面向学生和研究者的本地桌面软件 ——
+        公式计算、矩阵代数、微积分深化、概率统计、绘图可视化、数据分析、
+        时间序列、机器学习、AI 助手。无需联网，<span class="text-white font-semibold">数据永不上传</span>。
+      </p>
+
+      <!-- Key tags -->
+      <div class="flex flex-wrap gap-2 mt-6 reveal" style="transition-delay: 0.3s">
+        <span class="px-3 py-1 rounded-full text-xs font-medium bg-white/10 text-slate-300 border border-white/10">完全免费</span>
+        <span class="px-3 py-1 rounded-full text-xs font-medium bg-white/10 text-slate-300 border border-white/10">离线可用</span>
+        <span class="px-3 py-1 rounded-full text-xs font-medium bg-white/10 text-slate-300 border border-white/10">本机隐私</span>
+        <span class="px-3 py-1 rounded-full text-xs font-medium bg-white/10 text-slate-300 border border-white/10">Windows 10+</span>
+      </div>
+
+      <!-- CTA -->
+      <div class="mt-8 flex flex-col sm:flex-row gap-4 reveal" style="transition-delay: 0.4s">
+        <a href="#downloads" class="inline-flex items-center justify-center px-8 py-3.5 text-base font-semibold rounded-xl bg-indigo-600 text-white hover:bg-indigo-500 shadow-lg shadow-indigo-600/25 transition-all hover:-translate-y-0.5 active:scale-95">
+          <svg class="mr-2 w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3"/></svg>
+          下载 MatLite v1.3.0
+        </a>
+        <a href="#features" class="inline-flex items-center justify-center px-8 py-3.5 text-base font-semibold rounded-xl border border-slate-500/30 text-slate-200 hover:bg-white/10 transition-all">
+          了解功能
+          <svg class="ml-2 w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 14l-7 7m0 0l-7-7m7 7V3"/></svg>
+        </a>
+      </div>
+
+      <!-- Social proof -->
+      <p class="mt-6 text-xs text-slate-500 reveal" style="transition-delay: 0.5s">
+        Made by zoilzo &amp; Claude · 问题反馈：
+        <a href="mailto:17588853057@163.com" class="text-indigo-400 hover:text-indigo-300 underline">17588853057@163.com</a>
+      </p>
+    </div>
+  </div>
+  <!-- Bottom fade -->
+  <div class="absolute -bottom-1 left-0 right-0 h-24 bg-gradient-to-t from-slate-50 to-transparent"></div>
+</section>
+
+<!-- ====== Trust Bar ====== -->
+<div class="bg-emerald-50 border-b border-emerald-200">
+  <div class="max-w-6xl mx-auto px-4 sm:px-6 py-4 flex flex-col sm:flex-row items-start sm:items-center gap-3 text-sm text-emerald-800">
+    <span class="text-xl flex-shrink-0">🔒</span>
+    <span>
+      <strong>你的数据不上传：</strong>账号、历史、AI 对话、图片均保存在本机
+      <code class="px-1.5 py-0.5 bg-emerald-100/50 rounded text-xs font-mono">%APPDATA%\MatLite</code>，
+      不会发送到任何服务器。
+    </span>
+  </div>
+</div>
+
+<!-- ====== Features ====== -->
+<section id="features" class="py-20 sm:py-28 max-w-6xl mx-auto px-4 sm:px-6">
+  <div class="text-center mb-6 reveal">
+    <span class="px-3 py-1 rounded-full text-xs font-semibold bg-indigo-100 text-indigo-700">15 个内置模块</span>
+  </div>
+  <div class="text-center mb-16 reveal">
+    <h2 class="text-3xl sm:text-4xl font-bold text-slate-900">全部功能，一览无余</h2>
+    <p class="mt-3 text-slate-500 text-lg max-w-2xl mx-auto">从高中数学到研究生科研，覆盖数学与统计最常见场景</p>
+  </div>
+
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+    <!-- Feature cards -->
+    <div class="reveal group p-6 rounded-2xl bg-white border border-slate-200/60 shadow-sm hover:shadow-lg hover:border-indigo-200 transition-all">
+      <div class="w-11 h-11 flex items-center justify-center rounded-xl bg-gradient-to-br from-indigo-100 to-indigo-50 text-xl mb-4 group-hover:scale-110 transition-transform">🧮</div>
+      <h3 class="text-lg font-bold text-slate-900 mb-2">公式计算器</h3>
+      <p class="text-sm text-slate-500 leading-relaxed">表达式求值 · 符号求导 · 不定/定积分 · 解方程(组) · 极限计算 · 支持自然语法输入</p>
+    </div>
+
+    <div class="reveal group p-6 rounded-2xl bg-white border border-slate-200/60 shadow-sm hover:shadow-lg hover:border-indigo-200 transition-all" style="transition-delay: 0.05s">
+      <div class="w-11 h-11 flex items-center justify-center rounded-xl bg-gradient-to-br from-blue-100 to-blue-50 text-xl mb-4 group-hover:scale-110 transition-transform">🔢</div>
+      <h3 class="text-lg font-bold text-slate-900 mb-2">矩阵与线性代数</h3>
+      <p class="text-sm text-slate-500 leading-relaxed">行列式 · 逆矩阵 · 特征值与特征向量 · 矩阵分解 · 线性方程组的可视化求解</p>
+    </div>
+
+    <div class="reveal group p-6 rounded-2xl bg-white border border-slate-200/60 shadow-sm hover:shadow-lg hover:border-indigo-200 transition-all" style="transition-delay: 0.1s">
+      <div class="w-11 h-11 flex items-center justify-center rounded-xl bg-gradient-to-br from-cyan-100 to-cyan-50 text-xl mb-4 group-hover:scale-110 transition-transform">🔬</div>
+      <h3 class="text-lg font-bold text-slate-900 mb-2">方程与数值计算</h3>
+      <p class="text-sm text-slate-500 leading-relaxed">非线性方程求根 · 数值积分 · 插值与拟合 · 常微分方程数值解 · 高精度计算</p>
+    </div>
+
+    <div class="reveal group p-6 rounded-2xl bg-white border border-slate-200/60 shadow-sm hover:shadow-lg hover:border-indigo-200 transition-all" style="transition-delay: 0.1s">
+      <div class="w-11 h-11 flex items-center justify-center rounded-xl bg-gradient-to-br from-violet-100 to-violet-50 text-xl mb-4 group-hover:scale-110 transition-transform">∫</div>
+      <h3 class="text-lg font-bold text-slate-900 mb-2">微积分深化</h3>
+      <p class="text-sm text-slate-500 leading-relaxed">多元函数偏导数 · 重积分 · 曲线/曲面积分 · 级数展开与收敛判断</p>
+    </div>
+
+    <div class="reveal group p-6 rounded-2xl bg-white border border-slate-200/60 shadow-sm hover:shadow-lg hover:border-indigo-200 transition-all" style="transition-delay: 0.15s">
+      <div class="w-11 h-11 flex items-center justify-center rounded-xl bg-gradient-to-br from-purple-100 to-purple-50 text-xl mb-4 group-hover:scale-110 transition-transform">🔮</div>
+      <h3 class="text-lg font-bold text-slate-900 mb-2">复变函数</h3>
+      <p class="text-sm text-slate-500 leading-relaxed">复数运算 · 解析函数可视化 · 留数定理 · 共形映射 · 拉普拉斯变换</p>
+    </div>
+
+    <div class="reveal group p-6 rounded-2xl bg-white border border-slate-200/60 shadow-sm hover:shadow-lg hover:border-indigo-200 transition-all" style="transition-delay: 0.15s">
+      <div class="w-11 h-11 flex items-center justify-center rounded-xl bg-gradient-to-br from-pink-100 to-pink-50 text-xl mb-4 group-hover:scale-110 transition-transform">🎲</div>
+      <h3 class="text-lg font-bold text-slate-900 mb-2">概率与分布</h3>
+      <p class="text-sm text-slate-500 leading-relaxed">常见分布 PDF/CDF · 随机抽样 · 蒙特卡洛模拟 · 大数定律与中心极限定理演示</p>
+    </div>
+
+    <div class="reveal group p-6 rounded-2xl bg-white border border-slate-200/60 shadow-sm hover:shadow-lg hover:border-indigo-200 transition-all" style="transition-delay: 0.2s">
+      <div class="w-11 h-11 flex items-center justify-center rounded-xl bg-gradient-to-br from-rose-100 to-rose-50 text-xl mb-4 group-hover:scale-110 transition-transform">📈</div>
+      <h3 class="text-lg font-bold text-slate-900 mb-2">绘图可视化</h3>
+      <p class="text-sm text-slate-500 leading-relaxed">2D 函数曲线 · 3D 曲面图 · 散点/折线/柱状/直方图 · 支持中文标注 · 图片导出</p>
+    </div>
+
+    <div class="reveal group p-6 rounded-2xl bg-white border border-slate-200/60 shadow-sm hover:shadow-lg hover:border-indigo-200 transition-all" style="transition-delay: 0.2s">
+      <div class="w-11 h-11 flex items-center justify-center rounded-xl bg-gradient-to-br from-emerald-100 to-emerald-50 text-xl mb-4 group-hover:scale-110 transition-transform">📊</div>
+      <h3 class="text-lg font-bold text-slate-900 mb-2">数据分析统计</h3>
+      <p class="text-sm text-slate-500 leading-relaxed">Excel/CSV 导入 · 描述统计 · 正态性检验 · t 检验 · 方差分析 · 回归分析 · 一键导出 Word 报告</p>
+    </div>
+
+    <div class="reveal group p-6 rounded-2xl bg-white border border-slate-200/60 shadow-sm hover:shadow-lg hover:border-indigo-200 transition-all" style="transition-delay: 0.25s">
+      <div class="w-11 h-11 flex items-center justify-center rounded-xl bg-gradient-to-br from-amber-100 to-amber-50 text-xl mb-4 group-hover:scale-110 transition-transform">⏳</div>
+      <h3 class="text-lg font-bold text-slate-900 mb-2">时间序列分析</h3>
+      <p class="text-sm text-slate-500 leading-relaxed">趋势分解 · 季节性分析 · ARIMA 建模 · 自相关图 · 平稳性检验 · 预测</p>
+    </div>
+
+    <div class="reveal group p-6 rounded-2xl bg-white border border-slate-200/60 shadow-sm hover:shadow-lg hover:border-indigo-200 transition-all" style="transition-delay: 0.25s">
+      <div class="w-11 h-11 flex items-center justify-center rounded-xl bg-gradient-to-br from-orange-100 to-orange-50 text-xl mb-4 group-hover:scale-110 transition-transform">🧠</div>
+      <h3 class="text-lg font-bold text-slate-900 mb-2">机器学习入门</h3>
+      <p class="text-sm text-slate-500 leading-relaxed">K-Means · 线性/逻辑回归 · 决策树 · SVM · PCA 降维 · 模型评估与可视化</p>
+    </div>
+
+    <div class="reveal group p-6 rounded-2xl bg-white border border-slate-200/60 shadow-sm hover:shadow-lg hover:border-indigo-200 transition-all" style="transition-delay: 0.3s">
+      <div class="w-11 h-11 flex items-center justify-center rounded-xl bg-gradient-to-br from-teal-100 to-teal-50 text-xl mb-4 group-hover:scale-110 transition-transform">🤖</div>
+      <h3 class="text-lg font-bold text-slate-900 mb-2">AI 助手（智能工作流）</h3>
+      <p class="text-sm text-slate-500 leading-relaxed">接入本地 Ollama · 自动拆解任务 · 调用 36+ 内置工具 · 图文内嵌展示 · 全程离线</p>
+    </div>
+
+    <div class="reveal group p-6 rounded-2xl bg-white border border-slate-200/60 shadow-sm hover:shadow-lg hover:border-indigo-200 transition-all" style="transition-delay: 0.3s">
+      <div class="w-11 h-11 flex items-center justify-center rounded-xl bg-gradient-to-br from-sky-100 to-sky-50 text-xl mb-4 group-hover:scale-110 transition-transform">🎯</div>
+      <h3 class="text-lg font-bold text-slate-900 mb-2">拍照识题</h3>
+      <p class="text-sm text-slate-500 leading-relaxed">图片上传 · 本地视觉模型识别数学题目 · 自动调用对应模块求解 · 图片不离开本机</p>
+    </div>
+
+    <div class="reveal group p-6 rounded-2xl bg-white border border-slate-200/60 shadow-sm hover:shadow-lg hover:border-indigo-200 transition-all lg:col-start-1 lg:col-end-2" style="transition-delay: 0.35s">
+      <div class="w-11 h-11 flex items-center justify-center rounded-xl bg-gradient-to-br from-gray-100 to-gray-50 text-xl mb-4 group-hover:scale-110 transition-transform">🗂</div>
+      <h3 class="text-lg font-bold text-slate-900 mb-2">历史记录</h3>
+      <p class="text-sm text-slate-500 leading-relaxed">自动保存操作历史 · 按模块检索 · 游客模式与登录模式双支持</p>
+    </div>
+
+    <div class="reveal group p-6 rounded-2xl bg-white border border-slate-200/60 shadow-sm hover:shadow-lg hover:border-indigo-200 transition-all" style="transition-delay: 0.35s">
+      <div class="w-11 h-11 flex items-center justify-center rounded-xl bg-gradient-to-br from-indigo-100 to-indigo-50 text-xl mb-4 group-hover:scale-110 transition-transform">⚙️</div>
+      <h3 class="text-lg font-bold text-slate-900 mb-2">设置中心</h3>
+      <p class="text-sm text-slate-500 leading-relaxed">浅色/深色主题 · 公告与更新提醒 · SMTP 反馈配置 · 账号管理 · 全面自定义</p>
+    </div>
+
+    <div class="reveal group p-6 rounded-2xl bg-white border border-slate-200/60 shadow-sm hover:shadow-lg hover:border-indigo-200 transition-all" style="transition-delay: 0.4s">
+      <div class="w-11 h-11 flex items-center justify-center rounded-xl bg-gradient-to-br from-green-100 to-green-50 text-xl mb-4 group-hover:scale-110 transition-transform">📖</div>
+      <h3 class="text-lg font-bold text-slate-900 mb-2">帮助中心</h3>
+      <p class="text-sm text-slate-500 leading-relaxed">模块使用说明 · FAQ · 版本公告 · 更新日志 · 一键邮件反馈给开发者</p>
+    </div>
+  </div>
+</section>
+
+<!-- ====== Screenshot Gallery ====== -->
+<section id="screenshots" class="py-20 sm:py-28 bg-white border-y border-slate-200/60">
+  <div class="max-w-6xl mx-auto px-4 sm:px-6">
+    <div class="text-center mb-6 reveal">
+      <span class="px-3 py-1 rounded-full text-xs font-semibold bg-indigo-100 text-indigo-700">产品预览</span>
+    </div>
+    <div class="text-center mb-12 reveal">
+      <h2 class="text-3xl sm:text-4xl font-bold text-slate-900">真实界面截图</h2>
+      <p class="mt-3 text-slate-500 text-lg">一目了然的操作界面</p>
+    </div>
+
+    <!-- Main screenshot display -->
+    <div class="relative max-w-4xl mx-auto reveal">
+      <div class="relative rounded-2xl overflow-hidden shadow-2xl border border-slate-200 bg-slate-100 cursor-pointer group" id="main-screenshot-container" onclick="openLightbox(currentScreenshotIndex)">
+        <img id="main-screenshot" src="./_m_test3.png" alt="MatLite 界面截图" class="w-full h-auto object-cover" loading="lazy" />
+        <div class="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center">
+          <span class="opacity-0 group-hover:opacity-100 transition-opacity px-4 py-2 bg-white/90 rounded-lg text-sm font-semibold text-slate-700 shadow-lg">点击放大查看</span>
+        </div>
+      </div>
+
+      <!-- Thumbnails -->
+      <div class="flex gap-3 mt-4 justify-center flex-wrap">
+        <button onclick="showScreenshot(0)" class="thumb-btn w-16 h-12 rounded-lg overflow-hidden border-2 border-transparent hover:border-indigo-400 transition-all flex-shrink-0" data-index="0">
+          <img src="./_m_test3.png" alt="缩略图 1" class="w-full h-full object-cover" loading="lazy" />
+        </button>
+        <button onclick="showScreenshot(1)" class="thumb-btn w-16 h-12 rounded-lg overflow-hidden border-2 border-transparent hover:border-indigo-400 transition-all flex-shrink-0" data-index="1">
+          <img src="./_m_test2.png" alt="缩略图 2" class="w-full h-full object-cover" loading="lazy" />
+        </button>
+        <button onclick="showScreenshot(2)" class="thumb-btn w-16 h-12 rounded-lg overflow-hidden border-2 border-transparent hover:border-indigo-400 transition-all flex-shrink-0" data-index="2">
+          <img src="./_mat.png" alt="缩略图 3" class="w-full h-full object-cover" loading="lazy" />
+        </button>
+        <button onclick="showScreenshot(3)" class="thumb-btn w-16 h-12 rounded-lg overflow-hidden border-2 border-transparent hover:border-indigo-400 transition-all flex-shrink-0" data-index="3">
+          <img src="./_kmeans.png" alt="缩略图 4" class="w-full h-full object-cover" loading="lazy" />
+        </button>
+        <button onclick="showScreenshot(4)" class="thumb-btn w-16 h-12 rounded-lg overflow-hidden border-2 border-transparent hover:border-indigo-400 transition-all flex-shrink-0" data-index="4">
+          <img src="./_tree.png" alt="缩略图 5" class="w-full h-full object-cover" loading="lazy" />
+        </button>
+        <button onclick="showScreenshot(5)" class="thumb-btn w-16 h-12 rounded-lg overflow-hidden border-2 border-transparent hover:border-indigo-400 transition-all flex-shrink-0" data-index="5">
+          <img src="./_m_test4.png" alt="缩略图 6" class="w-full h-full object-cover" loading="lazy" />
+        </button>
+        <button onclick="showScreenshot(6)" class="thumb-btn w-16 h-12 rounded-lg overflow-hidden border-2 border-transparent hover:border-indigo-400 transition-all flex-shrink-0" data-index="6">
+          <img src="./_m_test5.png" alt="缩略图 7" class="w-full h-full object-cover" loading="lazy" />
+        </button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ====== Lightbox ====== -->
+<div id="lightbox" class="fixed inset-0 z-[100] bg-black/80 flex items-center justify-center" onclick="closeLightbox(event)">
+  <button onclick="closeLightbox()" class="absolute top-4 right-4 text-white/70 hover:text-white text-3xl leading-none w-10 h-10 flex items-center justify-center rounded-full hover:bg-white/10 transition-colors z-10">&times;</button>
+  <button onclick="prevScreenshot(event)" class="absolute left-4 top-1/2 -translate-y-1/2 text-white/70 hover:text-white text-4xl w-12 h-12 flex items-center justify-center rounded-full hover:bg-white/10 transition-colors">‹</button>
+  <button onclick="nextScreenshot(event)" class="absolute right-4 top-1/2 -translate-y-1/2 text-white/70 hover:text-white text-4xl w-12 h-12 flex items-center justify-center rounded-full hover:bg-white/10 transition-colors">›</button>
+  <img id="lightbox-img" src="" alt="截图放大" class="max-w-[90vw] max-h-[90vh] object-contain rounded-xl shadow-2xl" onclick="event.stopPropagation()" />
+  <div class="absolute bottom-6 left-1/2 -translate-x-1/2 flex gap-2">
+    <span class="dot" data-index="0"></span><span class="dot" data-index="1"></span><span class="dot" data-index="2"></span><span class="dot" data-index="3"></span><span class="dot" data-index="4"></span><span class="dot" data-index="5"></span><span class="dot" data-index="6"></span>
+  </div>
+</div>
+
+<!-- ====== System Requirements ====== -->
+<section class="py-16 max-w-6xl mx-auto px-4 sm:px-6 reveal">
+  <div class="max-w-4xl mx-auto">
+    <div class="text-center mb-10">
+      <h2 class="text-2xl sm:text-3xl font-bold text-slate-900">系统要求</h2>
+    </div>
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div class="p-5 rounded-xl bg-white border border-slate-200/60 shadow-sm">
+        <h3 class="font-bold text-slate-900 mb-3 text-sm flex items-center gap-2"><span class="text-lg">🖥️</span> 最低配置</h3>
+        <ul class="space-y-2 text-sm text-slate-600">
+          <li class="flex gap-2"><span class="w-1.5 h-1.5 rounded-full bg-slate-400 mt-2 flex-shrink-0"></span>Windows 10 64-bit 或更新版本</li>
+          <li class="flex gap-2"><span class="w-1.5 h-1.5 rounded-full bg-slate-400 mt-2 flex-shrink-0"></span>4 GB 内存</li>
+          <li class="flex gap-2"><span class="w-1.5 h-1.5 rounded-full bg-slate-400 mt-2 flex-shrink-0"></span>500 MB 可用磁盘空间</li>
+          <li class="flex gap-2"><span class="w-1.5 h-1.5 rounded-full bg-slate-400 mt-2 flex-shrink-0"></span>1366 × 768 或更高分辨率</li>
+          <li class="flex gap-2"><span class="w-1.5 h-1.5 rounded-full bg-slate-400 mt-2 flex-shrink-0"></span>无需管理员权限</li>
+        </ul>
+      </div>
+      <div class="p-5 rounded-xl bg-white border border-slate-200/60 shadow-sm">
+        <h3 class="font-bold text-slate-900 mb-3 text-sm flex items-center gap-2"><span class="text-lg">🚀</span> 推荐配置（启用 AI）</h3>
+        <ul class="space-y-2 text-sm text-slate-600">
+          <li class="flex gap-2"><span class="w-1.5 h-1.5 rounded-full bg-slate-400 mt-2 flex-shrink-0"></span>Windows 10/11 64-bit</li>
+          <li class="flex gap-2"><span class="w-1.5 h-1.5 rounded-full bg-slate-400 mt-2 flex-shrink-0"></span>8 GB 及以上内存</li>
+          <li class="flex gap-2"><span class="w-1.5 h-1.5 rounded-full bg-slate-400 mt-2 flex-shrink-0"></span>1 GB 可用磁盘空间</li>
+          <li class="flex gap-2"><span class="w-1.5 h-1.5 rounded-full bg-slate-400 mt-2 flex-shrink-0"></span>1920 × 1080 或更高分辨率</li>
+          <li class="flex gap-2"><span class="w-1.5 h-1.5 rounded-full bg-slate-400 mt-2 flex-shrink-0"></span>Ollama + 本地大模型（可选）</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ====== Downloads ====== -->
+<section id="downloads" class="py-20 sm:py-28 bg-gradient-to-b from-white to-slate-50 border-y border-slate-200/60">
+  <div class="max-w-6xl mx-auto px-4 sm:px-6">
+    <div class="text-center mb-6 reveal">
+      <span class="px-3 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-700">完全免费 · 无广告 · 无内购</span>
+    </div>
+    <div class="text-center mb-12 reveal">
+      <h2 class="text-3xl sm:text-4xl font-bold text-slate-900">下载 MatLite</h2>
+      <p class="mt-3 text-slate-500 text-lg">选择最适合你的方式</p>
+    </div>
+
+    <!-- Latest version -->
+    <div class="relative max-w-2xl mx-auto mb-16 reveal">
+      <div class="absolute -top-3 left-1/2 -translate-x-1/2 z-10">
+        <span class="inline-flex items-center px-4 py-1 rounded-full text-xs font-bold bg-indigo-600 text-white shadow-md shadow-indigo-600/20">
+          最新版 v1.3.0
+        </span>
+      </div>
+      <div class="p-8 rounded-2xl bg-gradient-to-br from-indigo-50 via-white to-violet-50 border-2 border-indigo-200/80 shadow-xl shadow-indigo-200/20">
+        <div class="text-center mb-6">
+          <div class="w-16 h-16 mx-auto mb-3 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-500 flex items-center justify-center text-2xl shadow-lg shadow-indigo-500/20">🧮</div>
+          <h3 class="text-xl font-bold text-slate-900">MatLite v1.3.0 · 工程优化与 AI 扩充</h3>
+          <p class="text-sm text-slate-500 mt-1">2026-09-21 发布</p>
+        </div>
+
+        <div class="flex flex-col sm:flex-row gap-4">
+          <!-- Installer -->
+          <div class="flex-1 p-5 rounded-xl bg-white border border-slate-200/60 shadow-sm hover:shadow-md transition-shadow">
+            <div class="text-3xl mb-2 text-center">💿</div>
+            <p class="font-bold text-slate-900 text-center">安装包（推荐）</p>
+            <div class="text-center mt-2 space-y-1 text-xs text-slate-400">
+              <p>含安装向导 · 快捷方式 · 协议确认</p>
+              <p>大小：<strong class="text-slate-600">~81 MB</strong></p>
+            </div>
+            <a href="./releases/v1.3.0/MatLiteSetup.exe" download
+               class="mt-4 flex items-center justify-center gap-2 px-5 py-2.5 text-sm font-semibold rounded-lg bg-indigo-600 text-white hover:bg-indigo-500 transition-all shadow-sm hover:shadow-md active:scale-95">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3"/></svg>
+              下载安装包
+            </a>
+          </div>
+          <!-- Portable -->
+          <div class="flex-1 p-5 rounded-xl bg-white border border-slate-200/60 shadow-sm hover:shadow-md transition-shadow">
+            <div class="text-3xl mb-2 text-center">📦</div>
+            <p class="font-bold text-slate-900 text-center">免安装便携版</p>
+            <div class="text-center mt-2 space-y-1 text-xs text-slate-400">
+              <p>解压即用 · 无需管理员权限</p>
+              <p>大小：<strong class="text-slate-600">~124 MB</strong></p>
+            </div>
+            <a href="./releases/v1.3.0/MatLite-便携版.zip" download
+               class="mt-4 flex items-center justify-center gap-2 px-5 py-2.5 text-sm font-semibold rounded-lg border-2 border-indigo-600 text-indigo-600 hover:bg-indigo-50 transition-all active:scale-95">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3"/></svg>
+              下载便携版
+            </a>
+          </div>
+        </div>
+
+        <p class="text-center text-xs text-slate-400 mt-5">
+          <a href="./releases/v1.3.0/安装条款.txt" target="_blank" class="underline hover:text-indigo-600">安装条款</a>
+          ·
+          <a href="./releases/v1.3.0/使用说明.txt" target="_blank" class="underline hover:text-indigo-600">使用说明</a>
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ====== Install Guide ====== -->
+<section id="guide" class="py-20 sm:py-28 max-w-6xl mx-auto px-4 sm:px-6">
+  <div class="text-center mb-6 reveal">
+    <span class="px-3 py-1 rounded-full text-xs font-semibold bg-indigo-100 text-indigo-700">快速上手</span>
+  </div>
+  <div class="text-center mb-12 reveal">
+    <h2 class="text-3xl sm:text-4xl font-bold text-slate-900">安装指南</h2>
+    <p class="mt-3 text-slate-500 text-lg">两种方式任选，均无需管理员权限</p>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 reveal">
+    <!-- Installer -->
+    <div class="p-6 sm:p-8 rounded-2xl bg-white border border-slate-200/60 shadow-sm hover:shadow-md transition-shadow">
+      <div class="flex items-center gap-3 mb-5">
+        <div class="w-12 h-12 flex items-center justify-center rounded-xl bg-gradient-to-br from-indigo-100 to-indigo-50 text-2xl">💿</div>
+        <div>
+          <h3 class="text-lg font-bold text-slate-900">安装包方式（推荐）</h3>
+          <p class="text-sm text-slate-400">适合大多数用户，带卸载入口</p>
+        </div>
+      </div>
+      <ol class="space-y-3 text-sm text-slate-600">
+        <li class="flex gap-3"><span class="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-full bg-indigo-100 text-xs font-bold text-indigo-600">1</span>双击 <code class="px-1.5 py-0.5 bg-slate-100 rounded text-xs">MatLiteSetup.exe</code></li>
+        <li class="flex gap-3"><span class="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-full bg-indigo-100 text-xs font-bold text-indigo-600">2</span>阅读并勾选同意「安装条款」</li>
+        <li class="flex gap-3"><span class="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-full bg-indigo-100 text-xs font-bold text-indigo-600">3</span>选择安装类型：完整（推荐）/ 精简 / 自定义</li>
+        <li class="flex gap-3"><span class="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-full bg-indigo-100 text-xs font-bold text-indigo-600">4</span>按需勾选桌面 / 开始菜单快捷方式，点击安装</li>
+        <li class="flex gap-3"><span class="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-full bg-indigo-100 text-xs font-bold text-indigo-600">5</span>完成时可勾选「立即运行 MatLite」</li>
+      </ol>
+      <p class="mt-4 text-xs text-slate-400">默认路径：<code class="px-1.5 py-0.5 bg-slate-100 rounded">%LOCALAPPDATA%\Programs\MatLite</code></p>
+    </div>
+
+    <!-- Portable -->
+    <div class="p-6 sm:p-8 rounded-2xl bg-white border border-slate-200/60 shadow-sm hover:shadow-md transition-shadow">
+      <div class="flex items-center gap-3 mb-5">
+        <div class="w-12 h-12 flex items-center justify-center rounded-xl bg-gradient-to-br from-emerald-100 to-emerald-50 text-2xl">📦</div>
+        <div>
+          <h3 class="text-lg font-bold text-slate-900">免安装便携版</h3>
+          <p class="text-sm text-slate-400">适合 U 盘携带或临时使用</p>
+        </div>
+      </div>
+      <ol class="space-y-3 text-sm text-slate-600">
+        <li class="flex gap-3"><span class="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-full bg-emerald-100 text-xs font-bold text-emerald-600">1</span>解压 <code class="px-1.5 py-0.5 bg-slate-100 rounded text-xs">MatLite-便携版.zip</code></li>
+        <li class="flex gap-3"><span class="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-full bg-emerald-100 text-xs font-bold text-emerald-600">2</span>双击 <code class="px-1.5 py-0.5 bg-slate-100 rounded text-xs">MatLite.exe</code> 即开即用</li>
+        <li class="flex gap-3"><span class="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-full bg-emerald-100 text-xs font-bold text-emerald-600">3</span>历史与设置自动保存在 <code class="px-1.5 py-0.5 bg-slate-100 rounded text-xs">%APPDATA%\MatLite</code></li>
+      </ol>
+      <div class="mt-5 p-4 rounded-lg bg-amber-50 border border-amber-200 text-sm text-amber-800">
+        <strong>💡 提示：</strong>便携版无卸载入口。如需删除，手动删除解压目录和 <code class="px-1.5 py-0.5 bg-amber-100 rounded">%APPDATA%\MatLite</code> 即可。
+      </div>
+    </div>
+  </div>
+
+  <!-- AI Setup -->
+  <div class="mt-8 p-6 sm:p-8 rounded-2xl bg-slate-800 text-slate-200 shadow-sm reveal">
+    <div class="flex items-center gap-3 mb-4">
+      <span class="text-2xl">🤖</span>
+      <h3 class="text-lg font-bold">可选：启用 AI 助手 / 拍照识题</h3>
+    </div>
+    <p class="text-sm text-slate-400 mb-4">两者都使用本地大模型（Ollama），图片与对话内容不离开你的电脑。</p>
+    <ol class="space-y-2 text-sm text-slate-300">
+      <li class="flex gap-3"><span class="font-mono text-indigo-400">1.</span>安装 <a href="https://ollama.com" target="_blank" rel="noopener" class="text-indigo-400 underline hover:text-indigo-300">Ollama</a>，执行 <code class="px-1.5 py-0.5 bg-slate-700 rounded text-xs text-emerald-300">ollama serve</code></li>
+      <li class="flex gap-3"><span class="font-mono text-indigo-400">2.</span>在「AI 助手」页点击「刷新」选择模型（如 <code class="px-1.5 py-0.5 bg-slate-700 rounded text-xs text-emerald-300">qwen3-vl:8b</code>）</li>
+      <li class="flex gap-3"><span class="font-mono text-indigo-400">3.</span>刷新失败可直接在框内输入模型名</li>
+    </ol>
+  </div>
+</section>
+
+<!-- ====== Version History ====== -->
+<section id="versions" class="py-20 sm:py-28 bg-white border-y border-slate-200/60">
+  <div class="max-w-6xl mx-auto px-4 sm:px-6">
+    <div class="text-center mb-6 reveal">
+      <span class="px-3 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-700">更新历史</span>
+    </div>
+    <div class="text-center mb-12 reveal">
+      <h2 class="text-3xl sm:text-4xl font-bold text-slate-900">所有版本</h2>
+      <p class="mt-3 text-slate-500 text-lg">历史版本归档，方便回退到旧版</p>
+    </div>
+
+    <!-- Version compare table -->
+    <div class="overflow-x-auto mb-12 reveal">
+      <table class="w-full text-sm border-collapse">
+        <thead>
+          <tr class="bg-slate-100">
+            <th class="text-left px-4 py-3 font-semibold text-slate-700 rounded-l-xl">版本</th>
+            <th class="text-left px-4 py-3 font-semibold text-slate-700">发布日期</th>
+            <th class="text-left px-4 py-3 font-semibold text-slate-700">安装包</th>
+            <th class="text-left px-4 py-3 font-semibold text-slate-700">便携版</th>
+            <th class="text-left px-4 py-3 font-semibold text-slate-700 rounded-r-xl">亮点</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100">
+          <tr class="hover:bg-indigo-50/50 transition-colors">
+            <td class="px-4 py-3.5"><span class="px-2 py-0.5 rounded text-xs font-bold bg-indigo-600 text-white">最新</span> <span class="font-bold text-slate-900 ml-1">v1.3.0</span></td>
+            <td class="px-4 py-3.5 text-slate-500">2026-09-21</td>
+            <td class="px-4 py-3.5"><a href="./releases/v1.3.0/MatLiteSetup.exe" download class="text-indigo-600 hover:text-indigo-500 underline font-medium">下载</a> <span class="text-xs text-slate-400">~81 MB</span></td>
+            <td class="px-4 py-3.5"><a href="./releases/v1.3.0/MatLite-便携版.zip" download class="text-indigo-600 hover:text-indigo-500 underline font-medium">下载</a> <span class="text-xs text-slate-400">~124 MB</span></td>
+            <td class="px-4 py-3.5 text-slate-600">工程全面优化 · 41 内置工具 · 绘图大幅提速</td>
+          </tr>
+          <tr class="hover:bg-slate-50 transition-colors">
+            <td class="px-4 py-3.5 font-bold text-slate-900">v1.2.0</td>
+            <td class="px-4 py-3.5 text-slate-500">2026-09-19</td>
+            <td class="px-4 py-3.5"><a href="./releases/v1.2.0/MatLiteSetup.exe" download class="text-indigo-600 hover:text-indigo-500 underline font-medium">下载</a> <span class="text-xs text-slate-400">~81 MB</span></td>
+            <td class="px-4 py-3.5"><a href="./releases/v1.2.0/MatLite-便携版.zip" download class="text-indigo-600 hover:text-indigo-500 underline font-medium">下载</a> <span class="text-xs text-slate-400">~124 MB</span></td>
+            <td class="px-4 py-3.5 text-slate-600">AI 智能工作流 · 36 内置工具 · 对话图片内嵌</td>
+          </tr>
+          <tr class="hover:bg-slate-50 transition-colors">
+            <td class="px-4 py-3.5 font-bold text-slate-900">v1.1.1</td>
+            <td class="px-4 py-3.5 text-slate-500">2026-09-19</td>
+            <td class="px-4 py-3.5"><a href="./releases/v1.1.1/MatLiteSetup.exe" download class="text-indigo-600 hover:text-indigo-500 underline font-medium">下载</a> <span class="text-xs text-slate-400">~81 MB</span></td>
+            <td class="px-4 py-3.5"><a href="./releases/v1.1.1/MatLite-便携版.zip" download class="text-indigo-600 hover:text-indigo-500 underline font-medium">下载</a> <span class="text-xs text-slate-400">~124 MB</span></td>
+            <td class="px-4 py-3.5 text-slate-600">设置页重写 · SMTP 反馈 · 修复文字重叠</td>
+          </tr>
+          <tr class="hover:bg-slate-50 transition-colors">
+            <td class="px-4 py-3.5 font-bold text-slate-900">v1.1.0</td>
+            <td class="px-4 py-3.5 text-slate-500">2026-09-18</td>
+            <td class="px-4 py-3.5"><a href="./releases/v1.1.0/MatLiteSetup.exe" download class="text-indigo-600 hover:text-indigo-500 underline font-medium">下载</a> <span class="text-xs text-slate-400">~81 MB</span></td>
+            <td class="px-4 py-3.5"><a href="./releases/v1.1.0/MatLite-便携版.zip" download class="text-indigo-600 hover:text-indigo-500 underline font-medium">下载</a> <span class="text-xs text-slate-400">~124 MB</span></td>
+            <td class="px-4 py-3.5 text-slate-600">复变函数 · 时间序列 · 机器学习 · 拍照识题</td>
+          </tr>
+          <tr class="hover:bg-slate-50 transition-colors">
+            <td class="px-4 py-3.5 font-bold text-slate-900">v1.0.0</td>
+            <td class="px-4 py-3.5 text-slate-500">2026-09-18</td>
+            <td class="px-4 py-3.5"><a href="./releases/v1.0.0/MatLiteSetup.exe" download class="text-indigo-600 hover:text-indigo-500 underline font-medium">下载</a> <span class="text-xs text-slate-400">~73 MB</span></td>
+            <td class="px-4 py-3.5"><a href="./releases/v1.0.0/MatLite-便携版.zip" download class="text-indigo-600 hover:text-indigo-500 underline font-medium">下载</a> <span class="text-xs text-slate-400">~112 MB</span></td>
+            <td class="px-4 py-3.5 text-slate-600">首个正式发布 · 基础功能全齐</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Changelog timeline -->
+    <div class="max-w-2xl mx-auto space-y-6 reveal">
+      <h3 class="text-lg font-bold text-slate-900 mb-4">📋 v1.3.0 更新详情</h3>
+      <ul class="space-y-3 text-sm text-slate-600">
+        <li class="flex gap-3"><span class="w-1.5 h-1.5 rounded-full bg-indigo-500 mt-2 flex-shrink-0"></span><strong>AI 工具扩充：</strong>新增数值求根 / 曲线拟合 / 复变函数求值 / 复变函数渲染 / Word 报告导出等 5 个工具，工具总量达 41 个，覆盖公式、矩阵、统计、概率、绘图、时序、机器学习、OCR 全模块</li>
+        <li class="flex gap-3"><span class="w-1.5 h-1.5 rounded-full bg-indigo-500 mt-2 flex-shrink-0"></span><strong>绘图大幅提速：</strong>曲面与等高线绘图改为向量化求值，消除 25 万次逐点 Python 循环，复杂图形秒出</li>
+        <li class="flex gap-3"><span class="w-1.5 h-1.5 rounded-full bg-indigo-500 mt-2 flex-shrink-0"></span><strong>稳定性提升：</strong>配置文件读写加线程锁与原子写入，避免多线程丢设置；历史记录写入加锁防数据竞争</li>
+        <li class="flex gap-3"><span class="w-1.5 h-1.5 rounded-full bg-indigo-500 mt-2 flex-shrink-0"></span>新增统一日志系统，异常不再静默丢弃（%APPDATA%\MatLite\app.log）；统一数学函数字典，消除 4 份重复定义</li>
+        <li class="flex gap-3"><span class="w-1.5 h-1.5 rounded-full bg-indigo-500 mt-2 flex-shrink-0"></span>修复：LaTeX 渲染后端冲突、直方图正态曲线缩放错误、科学计数法 / "2x3" 等表达式解析错误</li>
+        <li class="flex gap-3"><span class="w-1.5 h-1.5 rounded-full bg-indigo-500 mt-2 flex-shrink-0"></span>工程规范：新增 .gitignore / README，版本号全链路自动同步，打包脚本单一入口</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ====== FAQ ====== -->
+<section id="faq" class="py-20 sm:py-28 max-w-6xl mx-auto px-4 sm:px-6">
+  <div class="text-center mb-6 reveal">
+    <span class="px-3 py-1 rounded-full text-xs font-semibold bg-indigo-100 text-indigo-700">常见问题</span>
+  </div>
+  <div class="text-center mb-12 reveal">
+    <h2 class="text-3xl sm:text-4xl font-bold text-slate-900">FAQ</h2>
+    <p class="mt-3 text-slate-500 text-lg">你可能想知道的事</p>
+  </div>
+
+  <div class="max-w-2xl mx-auto space-y-3 reveal">
+    <details class="faq-item p-5 rounded-xl bg-white border border-slate-200/60 shadow-sm open:border-indigo-200 open:ring-1 open:ring-indigo-100 transition-all">
+      <summary class="flex items-center justify-between text-sm font-semibold text-slate-900">
+        <span>MatLite 收费吗？</span>
+        <svg class="faq-chevron w-5 h-5 text-slate-400 transition-transform duration-200" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+      </summary>
+      <p class="mt-3 text-sm text-slate-600 leading-relaxed">完全免费。个人使用、学习、作业、教学演示、个人研究均不需要付费。商业用途或再分发需取得开发者书面许可。</p>
+    </details>
+
+    <details class="faq-item p-5 rounded-xl bg-white border border-slate-200/60 shadow-sm open:border-indigo-200 open:ring-1 open:ring-indigo-100 transition-all">
+      <summary class="flex items-center justify-between text-sm font-semibold text-slate-900">
+        <span>需要联网吗？我的数据会上传吗？</span>
+        <svg class="faq-chevron w-5 h-5 text-slate-400 transition-transform duration-200" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+      </summary>
+      <div class="mt-3 text-sm text-slate-600 leading-relaxed space-y-2">
+        <p>全部计算、账号、历史、AI 对话都在本机完成，不需要联网。只有以下情况会少量联网：</p>
+        <ul class="list-disc pl-5 space-y-1">
+          <li>启动时检查公告与更新提醒（仅拉取，不上传任何数据）</li>
+          <li>意见反馈通过你配置的 SMTP 邮箱直发</li>
+        </ul>
+        <p>所有用户数据保存在 <code class="px-1 py-0.5 bg-slate-100 rounded">%APPDATA%\MatLite</code>，不会上传到任何服务器。</p>
+      </div>
+    </details>
+
+    <details class="faq-item p-5 rounded-xl bg-white border border-slate-200/60 shadow-sm open:border-indigo-200 open:ring-1 open:ring-indigo-100 transition-all">
+      <summary class="flex items-center justify-between text-sm font-semibold text-slate-900">
+        <span>支持哪些操作系统？</span>
+        <svg class="faq-chevron w-5 h-5 text-slate-400 transition-transform duration-200" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+      </summary>
+      <p class="mt-3 text-sm text-slate-600 leading-relaxed">目前支持 Windows 10/11 64-bit 及 Windows Server 2016+。macOS 和 Linux 版本暂不支持。</p>
+    </details>
+
+    <details class="faq-item p-5 rounded-xl bg-white border border-slate-200/60 shadow-sm open:border-indigo-200 open:ring-1 open:ring-indigo-100 transition-all">
+      <summary class="flex items-center justify-between text-sm font-semibold text-slate-900">
+        <span>安装包和便携版有什么区别？</span>
+        <svg class="faq-chevron w-5 h-5 text-slate-400 transition-transform duration-200" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+      </summary>
+      <div class="mt-3 text-sm text-slate-600 leading-relaxed space-y-2">
+        <p><strong>安装包</strong>（MatLiteSetup.exe）提供完整的安装向导：可创建桌面/开始菜单快捷方式、有卸载入口、支持开机自启等。推荐大多数用户使用。</p>
+        <p><strong>便携版</strong>（MatLite-便携版.zip）解压即用，适合放入 U 盘随身携带，但无卸载入口和快捷方式。</p>
+      </div>
+    </details>
+
+    <details class="faq-item p-5 rounded-xl bg-white border border-slate-200/60 shadow-sm open:border-indigo-200 open:ring-1 open:ring-indigo-100 transition-all">
+      <summary class="flex items-center justify-between text-sm font-semibold text-slate-900">
+        <span>AI 助手需要什么配置？</span>
+        <svg class="faq-chevron w-5 h-5 text-slate-400 transition-transform duration-200" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+      </summary>
+      <p class="mt-3 text-sm text-slate-600 leading-relaxed">需要安装 <a href="https://ollama.com" target="_blank" rel="noopener" class="text-indigo-600 underline">Ollama</a> 并下载一个本地模型（如 <code>qwen3-vl:8b</code>）。推荐 8 GB 以上内存。AI 功能完全可选，不启用也不影响其他模块的使用。</p>
+    </details>
+
+    <details class="faq-item p-5 rounded-xl bg-white border border-slate-200/60 shadow-sm open:border-indigo-200 open:ring-1 open:ring-indigo-100 transition-all">
+      <summary class="flex items-center justify-between text-sm font-semibold text-slate-900">
+        <span>怎么反馈问题或提建议？</span>
+        <svg class="faq-chevron w-5 h-5 text-slate-400 transition-transform duration-200" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+      </summary>
+      <p class="mt-3 text-sm text-slate-600 leading-relaxed">软件内点击「意见反馈」可通过 SMTP 直发邮件；也可直接发送邮件至 <a href="mailto:17588853057@163.com" class="text-indigo-600 underline">17588853057@163.com</a>。</p>
+    </details>
+
+    <details class="faq-item p-5 rounded-xl bg-white border border-slate-200/60 shadow-sm open:border-indigo-200 open:ring-1 open:ring-indigo-100 transition-all">
+      <summary class="flex items-center justify-between text-sm font-semibold text-slate-900">
+        <span>商业使用需要授权吗？</span>
+        <svg class="faq-chevron w-5 h-5 text-slate-400 transition-transform duration-200" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+      </summary>
+      <div class="mt-3 text-sm text-slate-600 leading-relaxed space-y-2">
+        <p>需要。商业用途或再分发须事先取得开发者书面许可。禁止用于非法用途、商业竞品、冒名官方或捆绑恶意软件后分发。</p>
+        <p>联系邮箱：<a href="mailto:17588853057@163.com" class="text-indigo-600 underline">17588853057@163.com</a></p>
+      </div>
+    </details>
+  </div>
+</section>
+
+<!-- ====== License Summary ====== -->
+<section class="py-20 bg-slate-900 border-t border-slate-800">
+  <div class="max-w-6xl mx-auto px-4 sm:px-6">
+    <div class="max-w-3xl mx-auto text-center">
+      <h2 class="text-2xl font-bold text-white mb-8">许可协议</h2>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-left">
+        <div class="p-5 rounded-xl bg-slate-800/50 border border-slate-700">
+          <p class="text-emerald-400 font-bold text-sm mb-2">✅ 个人使用 · 完全免费</p>
+          <p class="text-slate-400 text-sm leading-relaxed">可用于学习、作业、教学演示、个人研究。无需付费。</p>
+        </div>
+        <div class="p-5 rounded-xl bg-slate-800/50 border border-slate-700">
+          <p class="text-emerald-400 font-bold text-sm mb-2">🔒 数据隐私 · 本机存储</p>
+          <p class="text-slate-400 text-sm leading-relaxed">账号、历史、设置、AI 对话均保存在本机 <code class="px-1.5 py-0.5 bg-slate-700 rounded text-xs">%APPDATA%\MatLite</code>，绝不上传。</p>
+        </div>
+        <div class="p-5 rounded-xl bg-slate-800/50 border border-slate-700">
+          <p class="text-amber-400 font-bold text-sm mb-2">💼 商用需授权</p>
+          <p class="text-slate-400 text-sm leading-relaxed">商业用途或再分发须取得开发者书面许可。</p>
+        </div>
+        <div class="p-5 rounded-xl bg-slate-800/50 border border-slate-700">
+          <p class="text-amber-400 font-bold text-sm mb-2">⚖️ 按原样提供</p>
+          <p class="text-slate-400 text-sm leading-relaxed">计算结果与 AI 输出仅供参考，用户须自行核验重要结果。</p>
+        </div>
+      </div>
+      <p class="mt-8 text-sm text-slate-500">
+        安装或使用即视为同意
+        <a href="./releases/v1.3.0/安装条款.txt" target="_blank" class="text-indigo-400 underline hover:text-indigo-300">完整安装条款 / 许可协议</a>
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- ====== Footer ====== -->
+<footer class="bg-slate-950 text-slate-500 py-12 border-t border-slate-800">
+  <div class="max-w-6xl mx-auto px-4 sm:px-6">
+    <div class="flex flex-col sm:flex-row items-center justify-between gap-4">
+      <a href="#" class="flex items-center gap-2 text-lg font-bold text-white">
+        <span>🧮</span> MatLite 数学工作台
+      </a>
+      <p class="text-sm text-center">
+        Made with ❤️ by <span class="text-slate-300">zoilzo</span> &amp; <span class="text-slate-300">Claude</span>
+      </p>
+    </div>
+    <div class="mt-6 pt-6 border-t border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+      <p class="flex items-center gap-1">
+        <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+        本地计算 · 数据不上传 · 无需联网
+      </p>
+      <p>
+        问题反馈：
+        <a href="mailto:17588853057@163.com" class="text-indigo-400 hover:text-indigo-300 underline">17588853057@163.com</a>
+      </p>
+    </div>
+  </div>
+</footer>
+
+<!-- ====== JavaScript ====== -->
+<script>
+// ===== Scroll Reveal (IntersectionObserver) =====
+const revealElements = document.querySelectorAll('.reveal');
+const revealObserver = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      entry.target.classList.add('visible');
+    }
+  });
+}, { threshold: 0.1, rootMargin: '0px 0px -40px 0px' });
+
+revealElements.forEach(el => revealObserver.observe(el));
+
+// ===== Nav highlight on scroll =====
+const sections = document.querySelectorAll('section[id]');
+const navLinks = document.querySelectorAll('.nav-link');
+
+const navObserver = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      const id = entry.target.id;
+      navLinks.forEach(link => {
+        link.classList.toggle('active', link.getAttribute('href') === '#' + id);
+      });
+    }
+  });
+}, { threshold: 0.3, rootMargin: '-80px 0px 0px 0px' });
+
+sections.forEach(s => navObserver.observe(s));
+
+// ===== Navbar shadow on scroll =====
+const navbar = document.getElementById('navbar');
+window.addEventListener('scroll', () => {
+  navbar.classList.toggle('shadow-sm', window.scrollY > 20);
+});
+
+// ===== Screenshot Gallery =====
+const screenshotSources = [
+  './_m_test3.png',
+  './_m_test2.png',
+  './_mat.png',
+  './_kmeans.png',
+  './_tree.png',
+  './_m_test4.png',
+  './_m_test5.png',
+];
+const screenshotLabels = [
+  '公式计算 · 求导与积分',
+  '矩阵与线性代数 · 特征值求解',
+  '主界面一览 — 左侧导航 + 右侧工作区',
+  'K-Means 聚类可视化',
+  '决策树模型可视化',
+  '数据分析 · 描述统计',
+  '回归分析结果展示',
+];
+
+let currentScreenshotIndex = 0;
+
+function showScreenshot(index) {
+  currentScreenshotIndex = index;
+  const main = document.getElementById('main-screenshot');
+  main.src = screenshotSources[index];
+  main.alt = screenshotLabels[index];
+  // Update thumbnails
+  document.querySelectorAll('.thumb-btn').forEach((btn, i) => {
+    btn.classList.toggle('border-indigo-500', i === index);
+    btn.classList.toggle('border-transparent', i !== index);
+  });
+}
+
+// Initialize first thumbnail as active
+showScreenshot(0);
+
+// ===== Lightbox =====
+function openLightbox(index) {
+  const lb = document.getElementById('lightbox');
+  const img = document.getElementById('lightbox-img');
+  img.src = screenshotSources[index];
+  currentScreenshotIndex = index;
+  lb.classList.add('open');
+  updateDots();
+  document.body.style.overflow = 'hidden';
+}
+
+function closeLightbox(e) {
+  if (e && e.target !== e.currentTarget) return;
+  document.getElementById('lightbox').classList.remove('open');
+  document.body.style.overflow = '';
+}
+
+function prevScreenshot(e) {
+  if (e) e.stopPropagation();
+  currentScreenshotIndex = (currentScreenshotIndex - 1 + screenshotSources.length) % screenshotSources.length;
+  document.getElementById('lightbox-img').src = screenshotSources[currentScreenshotIndex];
+  updateDots();
+}
+
+function nextScreenshot(e) {
+  if (e) e.stopPropagation();
+  currentScreenshotIndex = (currentScreenshotIndex + 1) % screenshotSources.length;
+  document.getElementById('lightbox-img').src = screenshotSources[currentScreenshotIndex];
+  updateDots();
+}
+
+function updateDots() {
+  document.querySelectorAll('#lightbox .dot').forEach((dot, i) => {
+    dot.classList.toggle('active', i === currentScreenshotIndex);
+  });
+}
+
+// Keyboard navigation for lightbox
+document.addEventListener('keydown', (e) => {
+  if (!document.getElementById('lightbox').classList.contains('open')) return;
+  if (e.key === 'Escape') closeLightbox();
+  if (e.key === 'ArrowLeft') prevScreenshot();
+  if (e.key === 'ArrowRight') nextScreenshot();
+});
+</script>
+
+</body>
+</html>
