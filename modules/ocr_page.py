@@ -9,6 +9,7 @@ import io
 import json
 import os
 import threading
+import time
 
 import requests
 import customtkinter as ctk
@@ -41,7 +42,7 @@ def _compile(expr, var="x"):
     """校验并编译一个表达式函数，返回 (ok, 函数或错误信息)。"""
     try:
         import sympy as sp
-        e = sp.sympify(expr.replace("^", "**"), local_dict={"pi": sp.pi, "e": sp.E, "I": sp.I})
+        e = sp.sympify(expr.replace("^", "**"), locals={"pi": sp.pi, "e": sp.E, "I": sp.I})
         f = sp.lambdify(sp.symbols(var), e, "numpy")
         return True, (e, f)
     except Exception as err:
@@ -72,6 +73,8 @@ class OcrPage(ctk.CTkFrame):
         self.grid_rowconfigure(0, weight=1)
         self.image = None
         self._busy = False
+        self.batch = []          # 批量识别的图片列表
+        self.batch_results = []  # 每张图的结果 {text, expr, ok, note}
 
         # 读取 AI 连接配置
         base_dir = os.environ.get("APPDATA") or os.path.expanduser("~")
@@ -89,10 +92,13 @@ class OcrPage(ctk.CTkFrame):
         btn_row.grid(row=0, column=0, sticky="ew", padx=12, pady=(6, 4))
         btn_row.grid_columnconfigure(0, weight=1)
         btn_row.grid_columnconfigure(1, weight=1)
+        btn_row.grid_columnconfigure(2, weight=1)
         ctk.CTkButton(btn_row, text="📁 选择图片", height=36, command=self._pick).grid(
             row=0, column=0, sticky="ew", padx=(0, 4))
         ctk.CTkButton(btn_row, text="📋 粘贴截图", height=36, fg_color="gray40",
                       command=self._paste).grid(row=0, column=1, sticky="ew", padx=(4, 0))
+        ctk.CTkButton(btn_row, text="📸 拍照/截图", height=36, fg_color="gray40",
+                      command=self._camera).grid(row=0, column=2, sticky="ew", padx=(4, 0))
 
         self.img_lab = ctk.CTkLabel(left, text="尚未选择图片", font=ctk.CTkFont(size=13),
                                     text_color="gray50", anchor="n")
@@ -126,7 +132,7 @@ class OcrPage(ctk.CTkFrame):
         action.grid_columnconfigure((0, 1, 2), weight=1)
 
         tip = ("使用说明：\n"
-               "① 点「选择图片」或「粘贴截图」导入题目；\n"
+               "① 点「选择图片」「拍照(本机相机)」或「粘贴截图」导入题目；\n"
                "② 点「识别并解析」调用本地视觉模型转录并转成 Python 表达式；\n"
                "③ 在表达式框核对/修正（格式如 x**2 + 2*x + 1 或 integrate(x**2, x)）；\n"
                "④ 点「求导」「积分」或「画图」直接计算。\n"
@@ -134,6 +140,29 @@ class OcrPage(ctk.CTkFrame):
         ctk.CTkLabel(left, text=tip, justify="left", font=ctk.CTkFont(size=11),
                      text_color="gray45", anchor="w", wraplength=350).grid(
             row=10, column=0, sticky="w", padx=14, pady=(6, 12))
+
+        # ---- 批量识别 / 错题本 ----
+        ctk.CTkLabel(left, text="🖼 批量识别", font=ctk.CTkFont(size=13, weight="bold")).grid(
+            row=11, column=0, sticky="w", padx=14, pady=(10, 2))
+        proto_row = ctk.CTkFrame(left, fg_color="transparent")
+        proto_row.grid(row=12, column=0, sticky="ew", padx=12)
+        proto_row.grid_columnconfigure(0, weight=1)
+        proto_row.grid_columnconfigure(1, weight=1)
+        ctk.CTkButton(proto_row, text="📂 批量导入", height=34, command=self._pick_multi).grid(
+            row=0, column=0, sticky="ew", padx=(0, 4))
+        ctk.CTkButton(proto_row, text="🔍 识别全部", height=34, fg_color="#2a7f5c",
+                      command=self._run_batch).grid(row=0, column=1, sticky="ew", padx=(4, 0))
+        self.batch_list = ctk.CTkScrollableFrame(left, height=110, corner_radius=6)
+        self.batch_list.grid(row=13, column=0, sticky="ew", padx=12, pady=(4, 0))
+
+        wrong_row = ctk.CTkFrame(left, fg_color="transparent")
+        wrong_row.grid(row=14, column=0, sticky="ew", padx=12, pady=(8, 2))
+        wrong_row.grid_columnconfigure(0, weight=1)
+        wrong_row.grid_columnconfigure(1, weight=1)
+        ctk.CTkButton(wrong_row, text="⭐ 加入错题本", height=34, command=self._add_wrong).grid(
+            row=0, column=0, sticky="ew", padx=(0, 4))
+        ctk.CTkButton(wrong_row, text="📕 打开错题本", height=34, fg_color="#5b4b8a",
+                      command=self._open_wrongbook).grid(row=0, column=1, sticky="ew", padx=(4, 0))
 
         # ================= 右：结果 =================
         right = ctk.CTkFrame(self, corner_radius=12)
@@ -230,20 +259,26 @@ class OcrPage(ctk.CTkFrame):
         im.save(buf, format="PNG")
         return base64.b64encode(buf.getvalue()).decode("utf-8")
 
+    def _do_ocr(self, model, im=None):
+        """调用本地视觉模型识别一张图，返回模型原文（失败抛异常）。"""
+        base = self.base.get().strip().rstrip("/") or "http://localhost:11434"
+        url = f"{base}/api/generate"
+        if im is None:
+            b64 = self._image_b64()
+        else:
+            buf = io.BytesIO()
+            tmp = im.copy()
+            tmp.thumbnail((1280, 1280))
+            tmp.save(buf, format="PNG")
+            b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
+        payload = {"model": model, "prompt": PROMPT, "images": [b64], "stream": False}
+        r = requests.post(url, headers=self._headers(), json=payload, timeout=300, proxies=_NO_PROXY)
+        r.raise_for_status()
+        return r.json().get("response") or ""
+
     def _worker(self, model):
         try:
-            base = self.base.get().strip().rstrip("/") or "http://localhost:11434"
-            url = f"{base}/api/generate"
-            payload = {
-                "model": model,
-                "prompt": PROMPT,
-                "images": [self._image_b64()],
-                "stream": False,
-            }
-            r = requests.post(url, headers=self._headers(), json=payload, timeout=300, proxies=_NO_PROXY)
-            r.raise_for_status()
-            data = r.json()
-            text = data.get("response") or ""
+            text = self._do_ocr(model, None)
             self.after(0, self._done, text)
         except Exception as e:
             self.after(0, self._fail, str(e))
@@ -251,6 +286,7 @@ class OcrPage(ctk.CTkFrame):
     def _done(self, text):
         self._busy = False
         parsed = _split_response(text)
+        self._last_parsed_cache = parsed
         self._msg("【识别结果】\n" + text + "\n\n")
         expr = (parsed.get("表达式") or "").strip()
         if expr:
@@ -269,6 +305,267 @@ class OcrPage(ctk.CTkFrame):
     def _fail(self, err):
         self._busy = False
         self._msg(f"❌ 识别失败：{err}\n请确认 Ollama 已启动、模型名正确、地址可达。\n")
+
+    # ---- 批量识别 / 拍照 / 错题本 ----
+    def _pick_multi(self):
+        """多选图片加入批量队列。"""
+        from tkinter import filedialog
+        paths = filedialog.askopenfilenames(
+            title="选择多张题目图片（可 Ctrl/Shift 多选）",
+            filetypes=[("图片", "*.png *.jpg *.jpeg *.bmp *.webp"), ("所有文件", "*.*")])
+        if not paths:
+            return
+        for p in paths:
+            try:
+                self.batch.append(Image.open(p).convert("RGB"))
+            except Exception as e:
+                self.after(0, self._msg, f"无法打开 {p}: {e}\n")
+        self._refresh_batch_list()
+
+    def _refresh_batch_list(self):
+        for w in self.batch_list.winfo_children():
+            w.destroy()
+        for i, im in enumerate(self.batch):
+            done = i < len(self.batch_results)
+            label = f"第 {i + 1} 张{' ✓' if done else ''}  {im.width}×{im.height}"
+            b = ctk.CTkButton(self.batch_list, text=label, height=28, anchor="w",
+                              fg_color="transparent" if done else "gray30",
+                              text_color=("white" if done else "#e0e0e0"),
+                              command=lambda idx=i: self._select_batch(idx))
+            b.pack(fill="x", padx=2, pady=1)
+
+    def _select_batch(self, idx):
+        if idx < 0 or idx >= len(self.batch):
+            return
+        self._set_image(self.batch[idx])
+        if idx < len(self.batch_results):
+            r = self.batch_results[idx]
+            self._last_parsed_cache = _split_response(r.get("text", ""))
+            self._msg(f"--- 第 {idx + 1} 张 ---\n" + r.get("text", "") + "\n\n")
+        else:
+            self._msg(f"第 {idx + 1} 张尚未识别，请点「识别全部」。\n")
+
+    def _run_batch(self):
+        if self._busy:
+            return
+        if not self.batch:
+            self._msg("批量列表为空，请先点「批量导入」。\n")
+            return
+        model = self.model.get().strip()
+        if not model:
+            self._msg("模型名为空。\n")
+            return
+        self._busy = True
+        self._msg(f"开始批量识别 {len(self.batch)} 张图片……\n")
+        threading.Thread(target=self._batch_worker, args=(model,), daemon=True).start()
+
+    def _batch_worker(self, model):
+        self.batch_results = []
+        for i, im in enumerate(self.batch):
+            try:
+                text = self._do_ocr(model, im)
+                parsed = _split_response(text)
+                expr = (parsed.get("表达式") or "").strip()
+                ok = False
+                if expr:
+                    ok, _ = _compile(expr)
+                self.batch_results.append({"text": text, "expr": expr, "ok": ok})
+                self.after(0, self._msg,
+                           f"✓ 第 {i + 1} 张完成（{'可解析' if ok else '无表达式'}）\n")
+            except Exception as e:
+                self.batch_results.append({"text": "", "expr": "", "ok": False})
+                self.after(0, self._msg, f"✗ 第 {i + 1} 张失败：{e}\n")
+            self.after(0, self._refresh_batch_list)
+        self._busy = False
+        self.after(0, lambda: self._msg(
+            f"批量识别完成：{len(self.batch_results)}/{len(self.batch)} 张。\n"
+            "点左侧列表中的「第 N 张」可查看对应结果。\n"))
+
+    def _camera(self):
+        """拍照：打开本机摄像头实时预览窗口，点「拍下」抓取当前帧。无摄像头时回退截图。"""
+        try:
+            import cv2
+        except Exception:
+            self._fallback_screenshot("未安装 OpenCV")
+            return
+        cap = None
+        for idx in range(4):
+            c = cv2.VideoCapture(idx, cv2.CAP_DSHOW)
+            if c.isOpened():
+                cap = c
+                break
+            c.release()
+        if cap is None:
+            self._fallback_screenshot("未找到可用摄像头")
+            return
+        # 实时预览窗口
+        win = ctk.CTkToplevel(self)
+        win.title("📷 相机预览")
+        win.attributes("-topmost", True)
+        win.geometry("440x400")
+        win.grid_columnconfigure(0, weight=1)
+        win.grid_rowconfigure(0, weight=1)
+        lab = ctk.CTkLabel(win, text="连接相机中…", font=ctk.CTkFont(size=14))
+        lab.grid(row=0, column=0, sticky="nsew")
+        btnrow = ctk.CTkFrame(win, fg_color="transparent")
+        btnrow.grid(row=1, column=0, sticky="ew", padx=12, pady=8)
+        ctk.CTkButton(btnrow, text="📷 拍下", width=140, height=42,
+                      command=self._cam_capture).pack(side="left", expand=True, padx=4)
+        ctk.CTkButton(btnrow, text="取消", width=140, height=42, fg_color="gray40",
+                      command=self._cam_close).pack(side="left", expand=True, padx=4)
+        self._cam_win = win
+        self._cam_lab = lab
+        self._cam_cap = cap
+        self._cam_running = True
+        self._cam_last = None
+        self._cam_pending = False
+        win.protocol("WM_DELETE_WINDOW", self._cam_close)
+        threading.Thread(target=self._cam_loop, daemon=True).start()
+
+    def _cam_loop(self):
+        """后台循环读摄像头帧，转成 PIL 后交给主线程更新预览。"""
+        import cv2
+        cap = self._cam_cap
+        while getattr(self, "_cam_running", False) and cap is not None:
+            ok, frame = cap.read()
+            if not ok or frame is None:
+                break
+            try:
+                im = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+            except Exception:
+                continue
+            self._cam_last = im
+            if not self._cam_pending:
+                self._cam_pending = True
+                try:
+                    self.after(0, self._cam_show)
+                except RuntimeError:
+                    # 极端情况（如未跑 mainloop）下 after 不可用，保留最后一帧供「拍下」
+                    self._cam_pending = False
+        try:
+            cap.release()
+        except Exception:
+            pass
+
+    def _cam_show(self):
+        """在主线程更新预览画面（用最新一帧）。"""
+        self._cam_pending = False
+        im = self._cam_last
+        if im is None or not getattr(self, "_cam_win", None):
+            return
+        try:
+            im2 = im.copy()
+            im2.thumbnail((400, 320))
+            cimg = ctk.CTkImage(light_image=im2, size=(im2.width, im2.height))
+            self._cam_lab.configure(image=cimg, text="")
+            self._cam_lab._image = cimg
+        except Exception:
+            pass
+
+    def _cam_capture(self):
+        """把预览窗口当前的画面抓为题目图片并关闭相机。"""
+        im = getattr(self, "_cam_last", None)
+        if im is None:
+            self._msg("还没拍到画面，请稍候再点「拍下」。\n")
+            return
+        self._set_image(im)
+        self._msg("📸 已从相机拍下照片，可点「识别并解析」。\n")
+        self._cam_close()
+
+    def _cam_close(self):
+        self._cam_running = False
+        cap = getattr(self, "_cam_cap", None)
+        if cap is not None:
+            try:
+                cap.release()
+            except Exception:
+                pass
+            self._cam_cap = None
+        win = getattr(self, "_cam_win", None)
+        if win is not None:
+            try:
+                win.destroy()
+            except Exception:
+                pass
+            self._cam_win = None
+
+    def _fallback_screenshot(self, why):
+        try:
+            from PIL import ImageGrab
+            im = ImageGrab.grab()
+            if im is None:
+                raise RuntimeError("截图失败")
+            self._set_image(im)
+            self._msg(f"⚠️ {why}，已改用全屏截图。\n")
+        except Exception as e:
+            self._msg(f"拍照失败：{e}\n请改用「选择图片」或「粘贴截图」。\n")
+
+    def _wrongbook_path(self):
+        d = os.path.dirname(self.cfg_path)
+        os.makedirs(d, exist_ok=True)
+        return os.path.join(d, "wrong_book.json")
+
+    def _load_wrongbook(self):
+        try:
+            with open(self._wrongbook_path(), "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return []
+
+    def _save_wrongbook(self, book):
+        try:
+            with open(self._wrongbook_path(), "w", encoding="utf-8") as f:
+                json.dump(book, f, ensure_ascii=False, indent=1)
+        except Exception:
+            pass
+
+    def _last_parsed(self):
+        return getattr(self, "_last_parsed_cache", None)
+
+    def _add_wrong(self):
+        parsed = self._last_parsed()
+        if not parsed:
+            self._msg("暂无识别结果可加入错题本。请先识别一张图片。\n")
+            return
+        book = self._load_wrongbook()
+        book.append({"题目原文": parsed.get("题目原文", ""),
+                     "表达式": parsed.get("表达式", ""),
+                     "备注": parsed.get("备注", ""),
+                     "时间": time.strftime("%Y-%m-%d %H:%M")})
+        self._save_wrongbook(book)
+        self._msg(f"✅ 已加入错题本（第 {len(book)} 条）。\n")
+
+    def _open_wrongbook(self):
+        book = self._load_wrongbook()
+        if not book:
+            self._msg("错题本为空。\n")
+            return
+        win = ctk.CTkToplevel(self)
+        win.title("错题本")
+        win.geometry("680x480")
+        win.attributes("-topmost", True)
+        win.grid_columnconfigure(0, weight=1)
+        win.grid_rowconfigure(1, weight=1)
+        ctk.CTkLabel(win, text="📕 错题本", font=ctk.CTkFont(size=16, weight="bold")).grid(
+            row=0, column=0, padx=12, pady=(12, 4), sticky="w")
+        tb = ctk.CTkTextbox(win, font=ctk.CTkFont(family="Consolas", size=13))
+        tb.grid(row=1, column=0, sticky="nsew", padx=12, pady=(0, 4))
+        tb.configure(state="normal")
+        for i, e in enumerate(reversed(book), 1):
+            tb.insert("end", f"#{len(book) - i + 1}  {e.get('时间', '')}\n"
+                              f"  原文：{e.get('题目原文', '')}\n"
+                              f"  表达式：{e.get('表达式', '')}\n"
+                              f"  备注：{e.get('备注', '')}\n\n")
+        tb.configure(state="disabled")
+        ctk.CTkButton(win, text="清空错题本", fg_color="gray40",
+                      command=lambda: self._clear_wrongbook(tb)).grid(
+            row=2, column=0, padx=12, pady=(0, 12))
+
+    def _clear_wrongbook(self, tb):
+        self._save_wrongbook([])
+        tb.configure(state="normal")
+        tb.delete("1.0", "end")
+        tb.configure(state="disabled")
 
     def _msg(self, s):
         self.out.configure(state="normal")

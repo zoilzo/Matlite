@@ -18,6 +18,11 @@ error_log.txt
 
 # 测试截图 / 临时图片（_mat.png 等官网截图除外）
 _*.png
+_*.jpg
+_*.pdf
+_*.svg
+_digittest.*
+_v15_export.*
 !_mat.png
 !_tree.png
 !_kmeans.png

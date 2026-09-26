@@ -13,6 +13,7 @@ PRECS = ["4 位", "6 位"]
 ROWS = ["10 行", "20 行", "30 行", "50 行"]
 DPIS = ["80", "100", "150"]
 SCALES = ["0.9x", "1.0x", "1.1x", "1.2x"]
+PLOT_THEMES = ["出版默认", "期刊", "鲜艳", "深色"]
 
 
 def _to_num(s, default=0.0):
@@ -61,6 +62,12 @@ class SettingsPage(ctk.CTkFrame):
         self.dpi.pack(anchor="w", pady=(0, 4))
         self.dpi.set(str(int(S.get("plot_dpi", 100))))
 
+        hh("绘图主题（模板）")
+        self.plot_theme = ctk.CTkOptionMenu(body, values=PLOT_THEMES, width=160)
+        self.plot_theme.pack(anchor="w", pady=(0, 4))
+        t = S.get("plot_theme", "出版默认")
+        self.plot_theme.set(t if t in PLOT_THEMES else "出版默认")
+
         hh("界面字体缩放")
         self.scale = ctk.CTkOptionMenu(body, values=SCALES, width=160)
         self.scale.pack(anchor="w", pady=(0, 4))
@@ -94,6 +101,7 @@ class SettingsPage(ctk.CTkFrame):
         S.set_val("precision", int(_to_num(self.prec.get(), 6)))
         S.set_val("table_rows", int(_to_num(self.rows.get(), 10)))
         S.set_val("plot_dpi", int(_to_num(self.dpi.get(), 100)))
+        S.set_val("plot_theme", self.plot_theme.get())
         S.set_val("font_scale", _to_num(self.scale.get(), 1.0))
         S.set_val("announce_on", bool(self.announce_on.get()))
         S.set_val("announce_url", self.announce_url.get().strip())
@@ -107,6 +115,7 @@ class SettingsPage(ctk.CTkFrame):
         self.prec.set(f"{int(S.DEFAULTS['precision'])} 位")
         self.rows.set(f"{int(S.DEFAULTS['table_rows'])} 行")
         self.dpi.set(str(int(S.DEFAULTS['plot_dpi'])))
+        self.plot_theme.set(S.DEFAULTS['plot_theme'])
         self.scale.set(f"{float(S.DEFAULTS['font_scale']):.1f}x")
         if S.get("announce_on", True):
             self.announce_on.select()

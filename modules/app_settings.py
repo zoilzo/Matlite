@@ -12,13 +12,14 @@ import tempfile
 import shutil
 
 # 当前应用版本（版本号唯一来源，app/反馈/帮助中心都从这里读）
-APP_VERSION = "1.3.0"
+APP_VERSION = "1.8.0"
 
 DEFAULTS = {
     "theme": "浅色",        # 浅色 / 深色
     "precision": 6,         # 结果小数位数（对应设置页「4 位/6 位」）
     "table_rows": 10,       # 数据预览默认行数
     "plot_dpi": 100,        # 绘图分辨率
+    "plot_theme": "出版默认",  # 绘图主题：出版默认 / 期刊 / 鲜艳 / 深色
     "font_scale": 1.0,      # 界面字体缩放
     "announce_on": True,    # 是否接收公告与更新提醒
     "announce_url": "https://raw.githubusercontent.com/zoilzo/MatLite/main/announce.json",  # 免费静态托管公告地址（留空=关闭）
@@ -30,6 +31,14 @@ DEFAULTS = {
     "api_key": "",                        # API Key（本地服务一般留空）
     "temperature": 0.7,                   # 生成温度
     "ai_tools_on": True,                  # AI 助手是否自动调用内置功能模块
+    # 上下文窗口 token 数。Ollama 默认只有 2048，装不下「系统提示 + 52 个工具定义 +
+    # 对话历史」，会让模型输出预算被挤成 0，表现为 AI 回复空白，故必须显式加大。
+    "ai_num_ctx": 16384,
+    # ---- 协作模式（本地算 + 云端讲）----
+    "collab_on": False,                  # 是否开启多模型协作：本地算工具、云端讲思路
+    "cloud_base": "https://api.deepseek.com/v1",  # 云端 OpenAI 兼容服务地址
+    "cloud_key": "",                    # 云端 API Key
+    "cloud_model": "deepseek-chat",     # 云端讲解模型
 }
 
 CONFIG_NAME = "config.json"

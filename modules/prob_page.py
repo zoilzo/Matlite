@@ -19,6 +19,14 @@ DISTS = {
     "泊松分布": ("poisson", [("平均发生率 λ", "3")]),
     "指数分布": ("expon", [("速率 λ", "1")]),
     "均匀分布": ("uniform", [("下界 a", "0"), ("上界 b", "10")]),
+    "t 分布": ("t", [("自由度 df", "10")]),
+    "卡方 χ² 分布": ("chi2", [("自由度 df", "5")]),
+    "F 分布": ("f", [("df1", "5"), ("df2", "20")]),
+    "Beta 分布": ("beta", [("α", "2"), ("β", "3")]),
+    "Gamma 分布": ("gamma", [("形状 k", "2"), ("尺度 θ", "2")]),
+    "韦布尔分布": ("weibull_min", [("形状 c", "2"), ("尺度 λ", "2")]),
+    "几何分布": ("geom", [("成功概率 p", "0.3")]),
+    "超几何分布": ("hypergeom", [("总体数 M", "50"), ("成功数 n", "10"), ("抽取数 N", "8")]),
 }
 
 MODES = ["分布计算", "随机数生成", "分布拟合"]
@@ -32,6 +40,47 @@ def nums(text):
 def _float_or_none(s):
     s = s.strip()
     return float(s) if s else None
+
+
+def make_dist(name, vals):
+    """按名称与参数构造 scipy 分布对象（概率页 + AI 工具共用）。
+
+    注意：本机 scipy 1.15 的部分分布须把形状参数以位置参数传入（不能全用关键字），
+    所以统一在这里集中处理，避免各调用方踩坑。
+    """
+    if name == "正态分布":
+        mu, sigma = vals
+        return stats.norm(loc=mu, scale=max(sigma, 1e-9))
+    if name == "二项分布":
+        n, p = vals
+        return stats.binom(n=max(1, int(n)), p=max(0.0, min(1.0, p)))
+    if name == "泊松分布":
+        return stats.poisson(max(vals[0], 1e-9))
+    if name == "指数分布":
+        return stats.expon(scale=1.0 / max(vals[0], 1e-9))
+    if name == "均匀分布":
+        a, b = vals
+        return stats.uniform(loc=a, scale=max(b - a, 1e-9))
+    if name == "t 分布":
+        return stats.t(max(vals[0], 1e-9))
+    if name == "卡方 χ² 分布":
+        return stats.chi2(max(vals[0], 1e-9))
+    if name == "F 分布":
+        return stats.f(max(vals[0], 1e-9), max(vals[1], 1e-9))
+    if name == "Beta 分布":
+        return stats.beta(max(vals[0], 1e-9), max(vals[1], 1e-9))
+    if name == "Gamma 分布":
+        return stats.gamma(max(vals[0], 1e-9), scale=max(vals[1], 1e-9))
+    if name == "韦布尔分布":
+        return stats.weibull_min(max(vals[0], 1e-9), scale=max(vals[1], 1e-9))
+    if name == "几何分布":
+        return stats.geom(min(max(vals[0], 1e-9), 1 - 1e-9))
+    if name == "超几何分布":
+        M, n, N = int(vals[0]), int(vals[1]), int(vals[2])
+        if n < 0 or n > M or N < 1 or N > M:
+            raise ValueError("超几何参数需满足 0≤n≤M 且 1≤N≤M。")
+        return stats.hypergeom(M, n, N)
+    raise ValueError(f"未知分布：{name}")
 
 
 class ProbPage(ctk.CTkFrame):
@@ -145,20 +194,7 @@ class ProbPage(ctk.CTkFrame):
             self.dyn_rows[0][1].get()][1]))]
 
     def _make_dist(self, name, vals):
-        if name == "正态分布":
-            mu, sigma = vals
-            return stats.norm(loc=mu, scale=max(sigma, 1e-9))
-        if name == "二项分布":
-            n, p = vals
-            return stats.binom(n=max(1, int(n)), p=max(0.0, min(1.0, p)))
-        if name == "泊松分布":
-            return stats.poisson(max(vals[0], 1e-9))
-        if name == "指数分布":
-            return stats.expon(scale=1.0 / max(vals[0], 1e-9))
-        if name == "均匀分布":
-            a, b = vals
-            return stats.uniform(loc=a, scale=max(b - a, 1e-9))
-        raise ValueError(f"未知分布：{name}")
+        return make_dist(name, vals)
 
     # ================= 计算 =================
     def _run(self):
@@ -210,14 +246,12 @@ class ProbPage(ctk.CTkFrame):
         else:
             p = None
             self._msg("请填写 x1 和/或 x2 来求概率。")
-        # 95% 分位数
         self._msg(f"95% 分位数 = {dist.ppf(0.95):.6g}")
         self._plot_dist(dist, x1, x2, p)
 
     def _plot_dist(self, dist, x1, x2, p):
         try:
-            if isinstance(dist.dist(), stats.norm) or isinstance(dist.dist(), stats.expon) \
-                    or isinstance(dist.dist(), stats.uniform):
+            if isinstance(dist.dist(), stats.rv_continuous):
                 lo = dist.ppf(0.001)
                 hi = dist.ppf(0.999)
                 xs = np.linspace(lo, hi, 600)
@@ -254,18 +288,8 @@ class ProbPage(ctk.CTkFrame):
         n = int(float(self.dyn_rows[1 + len(DISTS[name][1])][1].get()))
         seed = _float_or_none(self.dyn_rows[2 + len(DISTS[name][1])][1].get())
         rng = np.random.default_rng(int(seed) if seed is not None else None)
-        if name == "正态分布":
-            data = rng.normal(vals[0], max(vals[1], 1e-9), n)
-        elif name == "二项分布":
-            data = rng.binomial(max(1, int(vals[0])), max(0.0, min(1.0, vals[1])), n)
-        elif name == "泊松分布":
-            data = rng.poisson(max(vals[0], 0), n)
-        elif name == "指数分布":
-            data = rng.exponential(1.0 / max(vals[0], 1e-9), n)
-        elif name == "均匀分布":
-            data = rng.uniform(vals[0], vals[1], n)
-        else:
-            raise ValueError("未知分布")
+        dist = self._make_dist(name, vals)
+        data = np.asarray(dist.rvs(n, random_state=rng))
         self._msg(f"已生成 {n} 个{name}随机数：")
         self._msg(f"均值={np.mean(data):.6g}，标准差={np.std(data):.6g}")
         self._msg(f"最小={np.min(data):.6g}，最大={np.max(data):.6g}")
@@ -300,6 +324,22 @@ class ProbPage(ctk.CTkFrame):
             sh, loc, scale = stats.lognorm.fit(data)
             fitted = stats.lognorm(sh, loc, scale)
             label = f"对数正态(σ={sh:.4g}, loc={loc:.4g}, scale={scale:.4g})"
+        elif "t" in which or "学生" in which:
+            df, loc, scale = stats.t.fit(data)
+            fitted = stats.t(df, loc=loc, scale=scale)
+            label = f"t(df={df:.4g}, loc={loc:.4g}, scale={scale:.4g})"
+        elif "gamma" in which.lower() or "伽马" in which or "Γ" in which:
+            a, loc, scale = stats.gamma.fit(data)
+            fitted = stats.gamma(a, loc=loc, scale=scale)
+            label = f"Gamma(k={a:.4g}, loc={loc:.4g}, scale={scale:.4g})"
+        elif "beta" in which.lower() or "贝塔" in which or "Β" in which:
+            a, b, loc, scale = stats.beta.fit(data)
+            fitted = stats.beta(a, b, loc=loc, scale=scale)
+            label = f"Beta(α={a:.4g}, β={b:.4g}, loc={loc:.4g}, scale={scale:.4g})"
+        elif "weib" in which.lower() or "韦布" in which:
+            c, loc, scale = stats.weibull_min.fit(data)
+            fitted = stats.weibull_min(c, loc=loc, scale=scale)
+            label = f"Weibull(c={c:.4g}, loc={loc:.4g}, scale={scale:.4g})"
         else:
             mu, sigma = stats.norm.fit(data)
             fitted = stats.norm(mu, sigma)

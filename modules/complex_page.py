@@ -92,7 +92,9 @@ class ComplexPage(ctk.CTkFrame):
                "· 坐标写法：1+i、2-3i、i（即 0+1i）；也可写 2+3j；\n"
                "· f(z) 里可用 z 复数变量，如 z**2、exp(z)、1/z；\n"
                "· 着色映射用 色调=辐角、亮度=模 直观展示保角性质；\n"
-               "· 泰勒/留数需要本机 sympy（已内置）。")
+               "· 泰勒/留数需要本机 sympy（已内置）。\n"
+               "· 留数：自动列出全部奇点并对每个奇点求留数；\n"
+               "  也可在「求值点 z0」填任意点（如 1+i）求该点留数。")
         ctk.CTkLabel(left, text=tip, justify="left", font=ctk.CTkFont(size=11),
                      text_color="gray45", anchor="w", wraplength=350).grid(
             row=10, column=0, sticky="w", padx=14, pady=(6, 12))
@@ -103,8 +105,15 @@ class ComplexPage(ctk.CTkFrame):
         right.grid_columnconfigure(0, weight=1)
         right.grid_rowconfigure(1, weight=1)
 
-        ctk.CTkLabel(right, text="计算结果", font=ctk.CTkFont(size=14, weight="bold")).grid(
-            row=0, column=0, sticky="w", padx=16, pady=(12, 4))
+        hdr = ctk.CTkFrame(right, fg_color="transparent")
+        hdr.grid(row=0, column=0, sticky="ew", padx=16, pady=(12, 4))
+        hdr.grid_columnconfigure(0, weight=1)
+        ctk.CTkLabel(hdr, text="计算结果", font=ctk.CTkFont(size=14, weight="bold")).grid(
+            row=0, column=0, sticky="w")
+        self.repro_btn = ctk.CTkButton(hdr, text="📦 导出复现", width=120, height=28,
+                                       fg_color="steelblue", command=self._export_repro)
+        self.repro_btn.grid(row=0, column=1, sticky="e", padx=(12, 0))
+        hdr.grid_columnconfigure(1, weight=0)
         self.out = ctk.CTkTextbox(right, font=ctk.CTkFont(family="Consolas", size=13))
         self.out.grid(row=1, column=0, sticky="nsew", padx=16, pady=(0, 4))
 
@@ -160,10 +169,36 @@ class ComplexPage(ctk.CTkFrame):
             elif op == OPS[4]:
                 try:
                     z = sp.symbols("z")
-                    sing = sp.singularities(e, z)
-                    self._msg(f"奇点：{sing}")
-                    r = sp.residue(e, z, 0)
-                    self._msg(f"在 z=0 处的留数：{r}")
+                    # 1) 先列出全部奇点
+                    try:
+                        sing = sp.singularities(e, z)
+                        sing_list = list(sing) if sing else []
+                    except Exception:
+                        sing_list = []
+                    if sing_list:
+                        self._msg(f"全部奇点：{sing_list}")
+                    else:
+                        self._msg("未解析出孤立奇点（该函数可能在复平面解析，或奇点为支点/本性奇点）。")
+                    # 2) 对每个孤立奇点逐一求留数（任意奇点留数）
+                    for pt in sing_list:
+                        try:
+                            r = sp.residue(e, z, pt)
+                            self._msg(f"  在 z = {pt} 处的留数 = {r}")
+                        except Exception as err:
+                            self._msg(f"  在 z = {pt} 处留数计算失败：{err}")
+                    # 3) 用户指定任意点 z0（覆盖默认）
+                    z0txt = self.z0.get().strip()
+                    z0c = _to_complex(z0txt) if z0txt else None
+                    if z0c is not None:
+                        try:
+                            r = sp.residue(e, z, z0c)
+                            self._msg(f"在指定点 z = {z0c} 处的留数 = {r}")
+                        except Exception as err:
+                            self._msg(f"在指定点 z = {z0c} 处计算失败：{err}")
+                    elif not sing_list:
+                        # 无显式奇点且未指定 z0，退化为在 z=0 求留数
+                        r = sp.residue(e, z, 0)
+                        self._msg(f"在 z = 0 处的留数 = {r}")
                 except Exception as err:
                     self._msg(f"留数计算失败：{err}")
         except Exception as err:
@@ -217,5 +252,36 @@ class ComplexPage(ctk.CTkFrame):
         self.ax.set_xlabel("Re z")
         self.ax.set_ylabel("Im z")
 
-    def on_show(self):
-        pass
+    def _export_repro(self):
+        from modules import repro
+        fexpr = self.fexpr.get().strip() or "z**2 + 1"
+        z0 = self.z0.get().strip()
+        op = self.op.get()
+        prob = [f"f(z) = {fexpr}", f"操作：{op}"]
+        if z0:
+            prob.append(f"指定点 z0 = {z0}")
+
+        code = [repro.script_header(f"复变函数 · {op}", "复变函数"),
+                "import sympy as sp", "import numpy as np", "",
+                "z = sp.symbols('z')",
+                "f = sp.sympify('''" + fexpr.replace("\'", "'") + "''' .replace('^', '**'), "
+                "       {'I': sp.I, 'i': sp.I, 'j': sp.I, 'pi': sp.pi, 'e': sp.E})", ""]
+        code += ["try:",
+                 "    sing = list(sp.singularities(f, z)) if sp.singularities(f, z) else []",
+                 "except Exception:",
+                 "    sing = []",
+                 "print('全部奇点：', sing if sing else '（无孤立奇点）')",
+                 "print('各奇点留数：')",
+                 "for pt in sing:",
+                 "    try: print(f'  z = {pt} 处留数 = {sp.residue(f, z, pt)}')",
+                 "    except Exception as err: print(f'  在 z = {pt} 处计算失败：{err}')"]
+        if z0:
+            zsym = z0.replace("i", "I").replace("j", "I").replace("^", "**")
+            code += ["print('指定点留数：')",
+                     "try: print(f'  z = " + z0 + " 处留数 = {sp.residue(f, z, sp.sympify(\'" + zsym + "\'))}')",
+                     "except Exception as err: print(f'  在指定点计算失败：{err}')"]
+        py_code = "\n".join(code) + "\n"
+        result = [ln for ln in self.out.get("1.0", "end").splitlines() if ln.strip()][-10:]
+        repro.export_recipe(self, f"复变函数 · {op}", "复变函数", prob, result, py_code,
+                            default_name=repro._safe_name(f"复变-{op}"),
+                            history=getattr(self, "history", None))

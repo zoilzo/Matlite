@@ -17,6 +17,8 @@ PyInstaller.__main__.run([
     "--version-file", os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "version_info.txt"),
     "--collect-all", "customtkinter",
     "--collect-data", "matplotlib",
+    "--hidden-import", "cv2",
+    "--collect-all", "cv2",
     "--exclude-module", "torch",
     "--exclude-module", "tensorboard",
     "--exclude-module", "tkinter.test",

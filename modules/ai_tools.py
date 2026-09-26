@@ -158,7 +158,13 @@ def _to_df(data):
         if not txt:
             raise ValueError("数据为空。")
         try:
-            return pd.read_csv(io.StringIO(txt))
+            df = pd.read_csv(io.StringIO(txt))
+            if df.shape[1] == 1 and len(df) > 1:
+                # 逗号读成单列 = 可能是空白分隔：按空白重试
+                chk = pd.read_csv(io.StringIO(txt), sep=r"\s+")
+                if chk.shape[1] > 1:
+                    return chk
+            return df
         except Exception:
             rows = [ln.split() for ln in txt.splitlines() if ln.strip()]
             if rows:
@@ -182,7 +188,7 @@ def _mat(data):
 
 
 def _dist(name, params):
-    """按分布名与参数构造 scipy 冻结分布。支持 normal/binom/poisson/expon/uniform。"""
+    """按分布名与参数构造 scipy 冻结分布。支持 normal/binom/poisson/expon/uniform/chi2/t/f/beta/gamma。"""
     from scipy import stats
     nm = str(name or "").lower()
     p = params or {}
@@ -204,7 +210,27 @@ def _dist(name, params):
         lo = _num(p.get("lo", p.get("low", 0)), 0)
         hi = max(lo, _num(p.get("hi", p.get("high", 1)), 1))
         return stats.uniform(lo, hi - lo), f"U({lo:g}, {hi:g})"
-    raise ValueError("不支持的分布。可选：normal（正态）/binom（二项）/poisson（泊松）/expon（指数）/uniform（均匀）")
+    if nm in ("chi2", "chi", "卡方"):
+        df = max(1e-9, _num(p.get("df", p.get("nu", 10)), 10))
+        return stats.chi2(df), f"χ²({df:g})"
+    if nm in ("t", "student", "学生t"):
+        df = max(1e-9, _num(p.get("df", p.get("nu", 10)), 10))
+        loc = _num(p.get("loc", 0), 0)
+        sc = max(1e-9, _num(p.get("scale", 1), 1))
+        return stats.t(df, loc=loc, scale=sc), f"t({df:g})"
+    if nm in ("f", "fisher", "f分布"):
+        dfn = max(1e-9, _num(p.get("dfn", p.get("nu1", 10)), 10))
+        dfd = max(1e-9, _num(p.get("dfd", p.get("nu2", 20)), 20))
+        return stats.f(dfn, dfd), f"F({dfn:g}, {dfd:g})"
+    if nm in ("beta", "β", "beta分布"):
+        a = max(1e-9, _num(p.get("a", 2), 2))
+        b = max(1e-9, _num(p.get("b", 2), 2))
+        return stats.beta(a, b), f"Beta({a:g}, {b:g})"
+    if nm in ("gamma", "伽马", "gamma分布"):
+        k = max(1e-9, _num(p.get("k", p.get("shape", 2)), 2))
+        sc = max(1e-9, _num(p.get("scale", 1), 1))
+        return stats.gamma(k, scale=sc), f"Gamma(k={k:g}, θ={sc:g})"
+    raise ValueError("不支持的分布。可选：normal（正态）/binom（二项）/poisson（泊松）/expon（指数）/uniform（均匀）/chi2（卡方）/t（t）/f（F）/beta（β）/gamma（伽马）。")
 
 
 def _fig_to_pil(fig, dpi=100):
@@ -642,6 +668,241 @@ def paired_t_test(data, before_col, after_col, alpha=0.05):
     return {"text": _fmt_dict(r)}
 
 
+# ============================================================
+# v1.4.0 新增：统计检验工具（11 个）
+# ============================================================
+
+def _col_list(v):
+    """把列名参数转成字符串列表（接受列表/元组或空格逗号分隔字符串）。"""
+    if v is None:
+        return []
+    if isinstance(v, (list, tuple)):
+        return [str(x) for x in v]
+    return [x for x in str(v).replace(",", " ").replace("，", " ").split() if x]
+
+
+def _fmt_with_tables(r, table_keys=()):
+    """排版统计 dict，并把 DataFrame/矩阵键以表格形式追加在末尾。"""
+    txt = _fmt_dict(r)
+    for k in table_keys:
+        v = r.get(k)
+        if isinstance(v, pd.DataFrame) and not v.empty:
+            txt += f"\n\n{k}：\n" + v.to_string()
+        elif isinstance(v, np.ndarray) and v.ndim == 2 and v.size:
+            txt += f"\n\n{k}：\n" + np.array2string(v)
+    return txt
+
+
+@_reg
+@_tool({
+    "properties": {
+        "data": {"description": "数据：CSV 文本或 {列名:[值]} 字典"},
+        "value_col": {"type": "string", "description": "因变量列名"},
+        "group_col": {"type": "string", "description": "分组变量列名（必须恰好 2 个水平）"},
+        "alpha": {"type": "number", "description": "显著性水平，默认 0.05"},
+    },
+    "required": ["data", "value_col", "group_col"],
+}, category="统计分析")
+def mannwhitney_u(data, value_col, group_col, alpha=0.05):
+    """Mann-Whitney U 检验：两独立样本分布差异（t 检验的非参替代，含秩双列相关效应量）。"""
+    from stats_utils import mannwhitney_u_test
+    df, vc, gc = _two_col_data(data, value_col, group_col)
+    r = mannwhitney_u_test(df, vc, gc, alpha=_num(alpha, 0.05))
+    return {"text": _fmt_dict(r)}
+
+
+@_reg
+@_tool({
+    "properties": {
+        "data": {"description": "数据：CSV 文本或 {列名:[值]} 字典"},
+        "before_col": {"type": "string", "description": "前测列名"},
+        "after_col": {"type": "string", "description": "后测列名"},
+        "alpha": {"type": "number", "description": "显著性水平，默认 0.05"},
+    },
+    "required": ["data", "before_col", "after_col"],
+}, category="统计分析")
+def wilcoxon_signed_rank(data, before_col, after_col, alpha=0.05):
+    """Wilcoxon 符号秩检验：配对样本中位数差异（配对 t 的非参替代，含效应量 r）。"""
+    from stats_utils import wilcoxon_signed_rank as _wsr
+    df, bc, ac = _two_col_data(data, before_col, after_col)
+    r = _wsr(df, bc, ac, alpha=_num(alpha, 0.05))
+    return {"text": _fmt_dict(r)}
+
+
+@_reg
+@_tool({
+    "properties": {
+        "data": {"description": "数据：CSV 文本或 {列名:[值]} 字典"},
+        "value_col": {"type": "string", "description": "因变量列名"},
+        "group_col": {"type": "string", "description": "分组变量列名（2 个以上水平）"},
+        "alpha": {"type": "number", "description": "显著性水平，默认 0.05"},
+    },
+    "required": ["data", "value_col", "group_col"],
+}, category="统计分析")
+def kruskal_wallis(data, value_col, group_col, alpha=0.05):
+    """Kruskal-Wallis 检验：多组独立样本分布差异（ANOVA 的非参替代，含 ε² 效应量）。"""
+    from stats_utils import kruskal_wallis_test
+    df, vc, gc = _two_col_data(data, value_col, group_col)
+    r = kruskal_wallis_test(df, vc, gc, alpha=_num(alpha, 0.05))
+    return {"text": _fmt_dict(r)}
+
+
+@_reg
+@_tool({
+    "properties": {
+        "data": {"description": "数据：CSV 文本或 {列名:[值]} 字典"},
+        "columns": {"type": "array", "items": {"type": "string"}, "description": "测量条件列名数组（≥2）"},
+        "alpha": {"type": "number", "description": "显著性水平，默认 0.05"},
+    },
+    "required": ["data", "columns"],
+}, category="统计分析")
+def friedman(data, columns, alpha=0.05):
+    """Friedman 检验：同一批对象多个条件下分布差异（重复测量 ANOVA 的非参替代，含 Kendall's W）。"""
+    from stats_utils import friedman_test
+    df = _to_df(data)
+    r = friedman_test(df, _col_list(columns), alpha=_num(alpha, 0.05))
+    return {"text": _fmt_dict(r)}
+
+
+@_reg
+@_tool({
+    "properties": {
+        "data": {"description": "数据：CSV 文本或 {列名:[值]} 字典"},
+        "value_col": {"type": "string", "description": "因变量列名"},
+        "group_col": {"type": "string", "description": "分组变量列名（至少 3 个水平）"},
+        "method": {"type": "string", "description": "方法：Tukey（默认）/ LSD / Bonferroni"},
+        "alpha": {"type": "number", "description": "显著性水平，默认 0.05"},
+    },
+    "required": ["data", "value_col", "group_col"],
+}, category="统计分析")
+def posthoc(data, value_col, group_col, method="Tukey", alpha=0.05):
+    """事后多重比较：ANOVA/Kruskal 显著后确定哪些组不同（Tukey HSD / LSD / Bonferroni）。"""
+    from stats_utils import posthoc_test
+    df, vc, gc = _two_col_data(data, value_col, group_col)
+    r = posthoc_test(df, vc, gc, method=str(method or "Tukey"), alpha=_num(alpha, 0.05))
+    return {"text": _fmt_with_tables(r, ("比较结果表",))}
+
+
+@_reg
+@_tool({
+    "properties": {
+        "data": {"description": "数据：CSV 文本或 {列名:[值]} 字典"},
+        "col": {"type": "string", "description": "数值列名"},
+        "mu": {"type": "number", "description": "检验值 μ0，默认 0"},
+        "alpha": {"type": "number", "description": "显著性水平，默认 0.05"},
+    },
+    "required": ["data", "col"],
+}, category="统计分析")
+def one_sample_t(data, col, mu=0.0, alpha=0.05):
+    """单样本 t 检验：检验变量均值是否等于已知值 μ0（含 95%CI 与 Cohen's d）。"""
+    from stats_utils import one_sample_t_test
+    df = _to_df(data)
+    r = one_sample_t_test(df, str(col), mu=_num(mu, 0.0), alpha=_num(alpha, 0.05))
+    return {"text": _fmt_dict(r)}
+
+
+@_reg
+@_tool({
+    "properties": {
+        "data": {"description": "数据：CSV 文本或 {列名:[值]} 字典"},
+        "col": {"type": "string", "description": "二分类列名"},
+        "success_value": {"type": "string", "description": "成功水平（留空自动：数值列取 1，文本取第 2 个水平）"},
+        "p0": {"type": "number", "description": "检验比例，默认 0.5"},
+        "alpha": {"type": "number", "description": "显著性水平，默认 0.05"},
+    },
+    "required": ["data", "col"],
+}, category="统计分析")
+def proportion_test(data, col, success_value="", p0=0.5, alpha=0.05):
+    """二项比例检验：检验二分类列中某一水平比例是否等于 p0（精确 Binomial + 近似 z）。"""
+    from stats_utils import proportion_test as _pt
+    df = _to_df(data)
+    sv = str(success_value or "")
+    if sv != "":
+        try:
+            sv = float(sv)
+        except ValueError:
+            pass
+    r = _pt(df, str(col), success_value=sv, p0=_num(p0, 0.5), alpha=_num(alpha, 0.05))
+    return {"text": _fmt_dict(r)}
+
+
+@_reg
+@_tool({
+    "properties": {
+        "data": {"description": "数据：CSV 文本或 {列名:[值]} 字典"},
+        "col1": {"type": "string", "description": "第一个二分类列名"},
+        "col2": {"type": "string", "description": "第二个二分类列名"},
+        "alpha": {"type": "number", "description": "显著性水平，默认 0.05"},
+    },
+    "required": ["data", "col1", "col2"],
+}, category="统计分析")
+def mcnemar(data, col1, col2, alpha=0.05):
+    """McNemar 检验：两个二分类变量的配对卡方检验（含列联表与精确 p 值）。"""
+    from stats_utils import mcnemar_test
+    df, c1, c2 = _two_col_data(data, col1, col2)
+    r = mcnemar_test(df, c1, c2, alpha=_num(alpha, 0.05))
+    return {"text": _fmt_with_tables(r, ("列联表",))}
+
+
+@_reg
+@_tool({
+    "properties": {
+        "data": {"description": "数据：CSV 文本或 {列名:[值]} 字典"},
+        "y_col": {"type": "string", "description": "二分类因变量列名"},
+        "x_cols": {"type": "array", "items": {"type": "string"}, "description": "数值自变量列名数组（≥1）"},
+        "success_value": {"type": "string", "description": "成功水平（留空自动编码）"},
+        "alpha": {"type": "number", "description": "显著性水平，默认 0.05"},
+    },
+    "required": ["data", "y_col", "x_cols"],
+}, category="统计分析")
+def logistic_regression(data, y_col, x_cols, success_value="", alpha=0.05):
+    """二分类逻辑回归：输出系数/OR/95%CI、McFadden R²、AUC 与准确率。"""
+    from stats_utils import logistic_regression as _lr
+    df = _to_df(data)
+    sv = str(success_value or "")
+    if sv != "":
+        try:
+            sv = float(sv)
+        except ValueError:
+            pass
+    r = _lr(df, str(y_col), _col_list(x_cols), alpha=_num(alpha, 0.05), success_value=sv)
+    return {"text": _fmt_with_tables(r, ("系数表",))}
+
+
+@_reg
+@_tool({
+    "properties": {
+        "data": {"description": "数据：CSV 文本或 {列名:[值]} 字典"},
+        "y_col": {"type": "string", "description": "连续因变量列名"},
+        "x_cols": {"type": "array", "items": {"type": "string"}, "description": "数值自变量列名数组（≥2）"},
+        "alpha": {"type": "number", "description": "显著性水平，默认 0.05"},
+    },
+    "required": ["data", "y_col", "x_cols"],
+}, category="统计分析")
+def multiple_regression(data, y_col, x_cols, alpha=0.05):
+    """多元线性回归：输出系数表、VIF 共线性、Durbin-Watson、R²/F/p。"""
+    from stats_utils import multiple_linear_regression
+    df = _to_df(data)
+    r = multiple_linear_regression(df, str(y_col), _col_list(x_cols), alpha=_num(alpha, 0.05))
+    return {"text": _fmt_with_tables(r, ("系数表", "VIF 表"))}
+
+
+@_reg
+@_tool({
+    "properties": {
+        "data": {"description": "数据：CSV 文本或 {列名:[值]} 字典"},
+        "columns": {"type": "array", "items": {"type": "string"}, "description": "题项列名数组（≥2，如 q1~q8）"},
+    },
+    "required": ["data", "columns"],
+}, category="统计分析")
+def cronbach(data, columns):
+    """信度分析 Cronbach's α：衡量量表题项的内部一致性，附各题项删除后 α。"""
+    from stats_utils import cronbach_alpha
+    df = _to_df(data)
+    r = cronbach_alpha(df, _col_list(columns))
+    return {"text": _fmt_with_tables(r, ("删除题项后 α",))}
+
+
 def _fmt_dict(d):
     """把统计结果 dict 排版成可读文本（跳过数组/DataFrame）。"""
     lines = []
@@ -959,6 +1220,121 @@ def plot_scatter_fit(data, x_col, y_col, title=""):
     ax.legend(fontsize=9)
     return {"text": f"回归方程：{r['equation']}\nR² = {r['r2']:.6g}，r = {r['pearson_r']:.6g}，p = {r['pearson_p']:.6g}",
             "image": _fig_to_pil(fig)}
+
+
+# ============================================================
+# v1.5.0 新增：出版级图型工具（小提琴 / 热图 / 误差棒 / 森林）
+# ============================================================
+
+def _pick_col(v, default=None):
+    """模型可能传列表或单个字符串，统一取第一个作为列名。"""
+    if isinstance(v, (list, tuple)):
+        return str(v[0]) if v else default
+    if v is None:
+        return default
+    return str(v)
+
+
+@_reg
+@_tool({
+    "properties": {
+        "data": {"description": "数据：CSV 文本（首行列名）或 {列名:[值]} 字典"},
+        "value_col": {"type": "string", "description": "数值列名"},
+        "group_col": {"type": "string", "description": "分组列名"},
+    },
+    "required": ["data", "value_col", "group_col"],
+}, image=True, category="绘图可视化")
+def plot_violin(data, value_col, group_col):
+    """小提琴图：按分组变量展示数值分布（含箱线中位数，比箱线图信息更全）。"""
+    from stats_plots import violin_by_group
+    df = _to_df(data)
+    vc, gc = _pick_col(value_col), _pick_col(group_col)
+    if not vc or not gc:
+        raise ValueError("请提供 value_col（数值列）与 group_col（分组列）。")
+    fig = violin_by_group(df, vc, gc)
+    return {"text": f"已绘制 {vc} 按 {gc} 分组小提琴图。", "image": _fig_to_pil(fig)}
+
+
+@_reg
+@_tool({
+    "properties": {
+        "data": {"description": "数据：CSV 文本或 {列名:[值]} 字典"},
+        "columns": {"description": "数值列名列表，留空自动取全部数值列"},
+    },
+    "required": ["data"],
+}, image=True, category="绘图可视化")
+def plot_heatmap(data, columns=None):
+    """相关矩阵热图：数值变量两两 Pearson 相关系数的热图，格内标注 r 值。"""
+    from stats_plots import correlation_heatmap
+    df = _to_df(data)
+    cols = _col_list(columns) if columns else None
+    fig = correlation_heatmap(df, cols)
+    return {"text": "已绘制相关矩阵热图（Pearson r）。", "image": _fig_to_pil(fig)}
+
+
+@_reg
+@_tool({
+    "properties": {
+        "data": {"description": "数据：CSV 文本或 {列名:[值]} 字典"},
+        "value_col": {"type": "string", "description": "数值列名"},
+        "group_col": {"type": "string", "description": "分组列名"},
+        "error": {"type": "string", "description": "误差类型 SD 或 SE，默认 SD"},
+    },
+    "required": ["data", "value_col", "group_col"],
+}, image=True, category="绘图可视化")
+def plot_errorbar(data, value_col, group_col, error="sd"):
+    """误差棒图：各组均值 ± SD/SE 的点误差棒图（实验科学论文标配）。"""
+    from stats_plots import errorbar_by_group
+    df = _to_df(data)
+    vc, gc = _pick_col(value_col), _pick_col(group_col)
+    if not vc or not gc:
+        raise ValueError("请提供 value_col（数值列）与 group_col（分组列）。")
+    fig = errorbar_by_group(df, vc, gc, error=str(error or "sd"))
+    return {"text": f"已绘制 {vc} 按 {gc} 分组均值误差棒图。", "image": _fig_to_pil(fig)}
+
+
+@_reg
+@_tool({
+    "properties": {
+        "estimates": {"description": "点估计列表，如 [0.5, -0.3, 1.2]（与 lower/upper 一一对应）"},
+        "lower": {"description": "95% 置信下限列表"},
+        "upper": {"description": "95% 置信上限列表"},
+        "labels": {"description": "行标签列表，如 ['因子A','因子B']"},
+        "table": {"description": "回归系数表（CSV/字典，含变量与95%CI列）；给了 table 可省略 estimates/lower/upper"},
+        "title": {"type": "string", "description": "图标题，默认自动"},
+    },
+    "required": [],
+}, image=True, category="绘图可视化")
+def plot_forest(estimates=None, lower=None, upper=None, labels=None, table=None, title=""):
+    """森林图：一组点估计与 95% 置信区间（回归系数 / OR / 效应量）。
+
+    传入 estimates/lower/upper 直接作图；或传回归系数表 由表自动识别列名作图。
+    """
+    from stats_plots import forest_plot, regression_forest_plot
+    if table is not None:
+        coef = _to_df(table)
+        fig = regression_forest_plot(coef, title=title or "回归系数森林图")
+        return {"text": "已绘制回归系数森林图（95% CI）。", "image": _fig_to_pil(fig)}
+    est = _nums(estimates) if estimates is not None else []
+    lo = _nums(lower) if lower is not None else []
+    hi = _nums(upper) if upper is not None else []
+    if not est:
+        raise ValueError("请提供 estimates/lower/upper，或提供回归系数表 table。")
+    lab = _pick_list(labels, len(est))
+    fig = forest_plot(est, lo, hi, labels=lab, title=title or "森林图")
+    return {"text": f"已绘制森林图（{len(est)} 项估计）。", "image": _fig_to_pil(fig)}
+
+
+def _pick_list(v, n):
+    """把 labels 转成长度为 n 的字符串列表。"""
+    if v is None:
+        return None
+    if isinstance(v, (list, tuple)):
+        return [str(x) for x in v]
+    parts = [x for x in str(v).replace("，", ",").split(",") if x.strip()]
+    if len(parts) == 1 and n > 1:
+        return [str(v)] * n
+    return parts[:n]
 
 
 # ============================================================
@@ -1375,3 +1751,140 @@ def ocr_recognize(image_path="", image_b64="", prompt=""):
     r.raise_for_status()
     text = r.json().get("response") or ""
     return {"text": text}
+
+
+# ============================================================
+# v1.6.0 P1 数据科学：分布库 + 机器学习
+# ============================================================
+
+
+@_reg
+@_tool({
+    "properties": {
+        "dist_name": {"description": "分布名：正态分布/t 分布/卡方 χ² 分布/F 分布/Beta 分布/Gamma 分布/韦布尔分布/二项分布/泊松分布/指数分布/均匀分布/几何分布/超几何分布"},
+        "params": {"type": "array", "items": {"type": "number"}, "description": "参数列表，按分布顺序（正态 [μ,σ]；t [df]；F [df1,df2]；Beta [α,β]；Gamma [k,θ]；超几何 [M,n,N]）"},
+        "x1": {"type": "number", "description": "下界（可空）"},
+        "x2": {"type": "number", "description": "上界（可空）"},
+    },
+    "required": ["dist_name", "params"],
+}, category="概率分布")
+def distribution_prob(dist_name, params, x1=None, x2=None):
+    """常用分布概率计算：给定分布与参数，求均值/标准差/95% 分位数及指定区间的概率。"""
+    from modules.prob_page import make_dist
+    vals = [float(v) for v in (params or [])]
+    d = make_dist(dist_name, vals)
+    lines = [f"分布：{dist_name}",
+             f"均值={d.mean():.6g}，标准差={d.std():.6g}",
+             f"95% 分位数={d.ppf(0.95):.6g}"]
+    if x2 is not None and x1 is None:
+        lines.append(f"P(X ≤ {x2:g}) = {d.cdf(x2):.6g}")
+    elif x1 is not None and x2 is not None:
+        lines.append(f"P({x1:g} ≤ X ≤ {x2:g}) = {d.cdf(x2) - d.cdf(x1):.6g}")
+    elif x1 is not None:
+        lines.append(f"P(X ≥ {x1:g}) = {1 - d.cdf(x1):.6g}")
+    return {"text": "\n".join(lines)}
+
+
+@_reg
+@_tool({
+    "properties": {
+        "data": {"description": "一维数据：数值列表或逗号/空格分隔字符串"},
+        "which": {"description": "拟合分布：正态/指数/对数正态/t/Gamma/Beta/Weibull"},
+    },
+    "required": ["data"],
+}, category="概率分布")
+def distribution_fit(data, which="正态"):
+    """分布拟合：给一批数据，估计最常见分布的参数，并用 K-S 检验判断拟合优劣。"""
+    import numpy as np
+    from scipy import stats as st
+    vals = np.array(_nums(data), dtype=float)
+    if len(vals) < 5:
+        raise ValueError("至少需要 5 个数据点。")
+    w = str(which or "")
+    if "t" in w or "学生" in w:
+        p = st.t.fit(vals); d = st.t(*p); label = f"t(df={p[0]:.4g})"
+    elif "gamma" in w.lower() or "伽马" in w or "Γ" in w:
+        p = st.gamma.fit(vals); d = st.gamma(*p); label = f"Gamma(a={p[0]:.4g}, scale={p[-1]:.4g})"
+    elif "beta" in w.lower() or "贝塔" in w or "Β" in w:
+        p = st.beta.fit(vals); d = st.beta(*p); label = f"Beta(a={p[0]:.4g}, b={p[1]:.4g})"
+    elif "weib" in w.lower() or "韦布" in w:
+        p = st.weibull_min.fit(vals); d = st.weibull_min(*p); label = f"Weibull(c={p[0]:.4g})"
+    elif "指数" in w:
+        p = st.expon.fit(vals); d = st.expon(*p); label = f"指数(scale={p[-1]:.4g})"
+    elif "对数正态" in w:
+        p = st.lognorm.fit(vals); d = st.lognorm(*p); label = f"对数正态(σ={p[0]:.4g})"
+    else:
+        p = st.norm.fit(vals); d = st.norm(*p); label = f"正态(μ={p[0]:.4g}, σ={p[-1]:.4g})"
+    ks, ks_p = st.kstest(vals, d.cdf)
+    return {"text": f"拟合分布：{label}\nK-S 检验：统计量={ks:.4f}，p={ks_p:.4f}\n" +
+            ("数据近似服从该分布（p>0.05）。" if ks_p > 0.05 else "数据可能不服从该分布（p≤0.05）。")}
+
+
+@_reg
+@_tool({
+    "properties": {
+        "data": {"description": "数据：CSV 文本（首行列名）或 {列名:[值]} 字典或嵌套列表"},
+        "label_col": {"description": "标签（类别）列名，默认最后一列"},
+        "model": {"description": "模型：随机森林(默认)/决策树/SVM/kNN"},
+        "test_ratio": {"type": "number", "description": "测试集比例，默认 0.2"},
+        "cv": {"type": "integer", "description": "交叉验证折数，默认 5，0=关闭"},
+    },
+    "required": ["data"],
+}, category="机器学习")
+def ml_classify(data, label_col=None, model="随机森林", test_ratio=0.2, cv=5):
+    """机器学习分类：随机森林/决策树/SVM/kNN，输出测试集准确率、交叉验证结果与混淆矩阵/ROC AUC。"""
+    import numpy as np
+    from sklearn.model_selection import train_test_split, cross_val_score
+    from sklearn.metrics import confusion_matrix, roc_curve, auc
+    df = _to_df(data)
+    if label_col is None:
+        col = df.columns[-1]
+    else:
+        col = _pick_col(label_col) or label_col
+        if col not in df.columns:
+            raise ValueError(f"找不到标签列：{label_col}")
+    X = df.drop(columns=[col]).select_dtypes(include="number").values.astype(float)
+    y = df[col].astype(str).values
+    if X.shape[0] < 8:
+        raise ValueError("样本太少（至少 8 行）。")
+    if len(set(y)) < 2:
+        raise ValueError("标签至少需要 2 个类别。")
+    m = str(model or "随机森林")
+    if "随机森林" in m or "random" in m.lower():
+        from sklearn.ensemble import RandomForestClassifier
+        mdl = RandomForestClassifier(n_estimators=200, random_state=0); nm = "随机森林"
+    elif "决策树" in m or "decision" in m.lower():
+        from sklearn.tree import DecisionTreeClassifier
+        mdl = DecisionTreeClassifier(random_state=0); nm = "决策树"
+    elif "svm" in m.lower() or "支持向量" in m:
+        from sklearn.svm import SVC
+        mdl = SVC(kernel="rbf", probability=True, random_state=0); nm = "SVM"
+    elif "knn" in m.lower() or "近邻" in m:
+        from sklearn.neighbors import KNeighborsClassifier
+        mdl = KNeighborsClassifier(n_neighbors=max(1, min(5, int(X.shape[0])))); nm = "kNN"
+    else:
+        raise ValueError("不支持的模型，请选 随机森林/决策树/SVM/kNN。")
+    ratio = float(test_ratio or 0.2)
+    Xtr, Xte, ytr, yte = train_test_split(X, y, test_size=ratio, random_state=0)
+    mdl.fit(Xtr, ytr)
+    acc = mdl.score(Xte, yte)
+    lines = [f"模型：{nm}", f"测试集准确率 acc={acc:.1%}（{Xte.shape[0]} 个样本）"]
+    cvf = int(cv or 0)
+    if cvf and X.shape[0] > max(cvf, 5):
+        try:
+            s = cross_val_score(mdl, X, y, cv=cvf)
+            lines.append(f"交叉验证（{cvf} 折）：acc={s.mean():.1%} ± {s.std():.1%}")
+        except Exception as e:
+            lines.append(f"交叉验证失败：{e}")
+    pred = mdl.predict(Xte)
+    classes = sorted(set(y))
+    if len(classes) == 2:
+        pos = classes[1]
+        proba = mdl.predict_proba(Xte)
+        fpr, tpr, _ = roc_curve((yte == pos), proba[:, list(classes).index(pos)])
+        lines.append(f"ROC AUC（类「{pos}」）={auc(fpr, tpr):.3g}（越接近 1 越好）")
+    cm = confusion_matrix(yte, pred, labels=classes)
+    lines.append("混淆矩阵（行=真实，列=预测）：")
+    for row in cm:
+        lines.append("  " + "  ".join(str(int(x)) for x in row))
+    return {"text": "\n".join(lines)}

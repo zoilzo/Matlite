@@ -27,14 +27,23 @@ from stats_utils import (
     descriptive_stats_table, normality_table,
     independent_t_test, simple_linear_regression, format_p,
     chi_square_test, anova_one_way, correlation_test, paired_t_test,
+    mannwhitney_u_test, wilcoxon_signed_rank, kruskal_wallis_test,
+    friedman_test, posthoc_test, one_sample_t_test, proportion_test,
+    mcnemar_test, logistic_regression, multiple_linear_regression,
+    cronbach_alpha,
 )
 import stats_plots as sp
 from stats_report import build_word_report
 
 
 ANALYSIS_TYPES = ["描述统计", "正态性检验", "t 检验", "回归分析",
-                  "卡方检验", "方差分析 ANOVA", "相关性检验", "配对 t 检验"]
-PLOT_TYPES = ["散点图（含拟合线）", "直方图（含正态曲线）", "正态 Q-Q 图", "分组箱线图"]
+                  "卡方检验", "方差分析 ANOVA", "相关性检验", "配对 t 检验",
+                  "Mann-Whitney U", "Wilcoxon 符号秩", "Kruskal-Wallis",
+                  "Friedman 检验", "事后多重比较", "单样本 t 检验",
+                  "比例检验", "McNemar 检验", "逻辑回归", "多元线性回归",
+                  "信度分析 (Cronbach's α)"]
+PLOT_TYPES = ["散点图（含拟合线）", "直方图（含正态曲线）", "正态 Q-Q 图", "分组箱线图",
+              "小提琴图（分组分布）", "误差棒图（均值±SE）", "相关矩阵热图", "回归森林图"]
 ALPHA_CHOICES = ["0.05", "0.01", "0.10"]
 
 
@@ -127,7 +136,7 @@ class DataPage(ctk.CTkFrame):
             row=11, column=0, sticky="ew", padx=12, pady=(4, 4))
 
         # 导出报告
-        ctk.CTkButton(left, text="📄 导出 Word 报告", height=40, fg_color="#2a7f5c",
+        ctk.CTkButton(left, text="📄 导出报告（Word / PDF）", height=40, fg_color="#2a7f5c",
                       command=self._export).grid(row=12, column=0, sticky="ew", padx=12, pady=(10, 4))
 
         # AI 解读
@@ -195,9 +204,10 @@ class DataPage(ctk.CTkFrame):
     def _load(self):
         f = filedialog.askopenfilename(
             title="选择数据文件",
-            filetypes=[("数据文件", "*.xlsx *.xls *.csv"),
+            filetypes=[("数据文件", "*.xlsx *.xls *.csv *.txt"),
                        ("Excel 文件", "*.xlsx *.xls"),
                        ("CSV 文件", "*.csv"),
+                       ("文本文件", "*.txt"),
                        ("所有文件", "*.*")],
         )
         if not f:
@@ -206,16 +216,24 @@ class DataPage(ctk.CTkFrame):
 
     def _apply_file(self, f):
         try:
-            if f.lower().endswith(".csv"):
+            ext = f.lower().rsplit(".", 1)[-1] if "." in f else ""
+            if ext in ("csv", "txt"):
                 df = None
                 for enc in ("utf-8-sig", "utf-8", "gbk"):
                     try:
-                        df = pd.read_csv(f, encoding=enc)
+                        if ext == "csv":
+                            df = pd.read_csv(f, encoding=enc)
+                        else:
+                            # txt：自动嗅探分隔符（逗号 / 制表符 / 分号 / 空白）
+                            df = pd.read_csv(f, encoding=enc, sep=None, engine="python")
                         break
                     except UnicodeDecodeError:
                         continue
                 if df is None:
-                    raise ValueError("无法识别 CSV 文件编码，请另存为 UTF-8 后重试。")
+                    raise ValueError("无法识别文件编码，请另存为 UTF-8 后重试。")
+                if df.shape[1] <= 1 and ext == "txt":
+                    # 单列结果通常是分隔符识别失败，退回按空白分隔
+                    df = pd.read_csv(f, sep=r"\s+", engine="python")
             else:
                 df = pd.read_excel(f)
         except Exception as e:
@@ -254,6 +272,17 @@ class DataPage(ctk.CTkFrame):
         self.anova = None
         self.corr = None
         self.paired = None
+        self.mw = None
+        self.wsr = None
+        self.kw = None
+        self.fried = None
+        self.post = None
+        self.osamp = None
+        self.prop = None
+        self.mcn = None
+        self.logreg = None
+        self.multireg = None
+        self.cron = None
         self.figures = []
         self._clear_plot()
 
@@ -425,6 +454,134 @@ class DataPage(ctk.CTkFrame):
                 return
             self._dd(self.dyn, "前测列（如实验前）", num, 0)
             self._dd(self.dyn, "后测列（如实验后）", num, 2, default=num[1])
+        elif t == "Mann-Whitney U":
+            num = self._numeric_columns()
+            allc = self._all_columns()
+            grp = next((c for c in allc if c not in num), (allc[0] if allc else ""))
+            self._dd(self.dyn, "因变量（数值列）", num, 0)
+            self._dd(self.dyn, "分组变量（恰好 2 组）", allc, 2, default=grp)
+        elif t == "Wilcoxon 符号秩":
+            num = self._numeric_columns()
+            if len(num) < 2:
+                ctk.CTkLabel(self.dyn, text="（需要至少 2 个数值列）",
+                             font=ctk.CTkFont(size=12), text_color="gray45").grid(
+                    row=0, column=0, sticky="w", padx=4, pady=4)
+                return
+            self._dd(self.dyn, "前测列（如实验前）", num, 0)
+            self._dd(self.dyn, "后测列（如实验后）", num, 2, default=num[1])
+        elif t == "Kruskal-Wallis":
+            num = self._numeric_columns()
+            allc = self._all_columns()
+            grp = next((c for c in allc if c not in num), (allc[0] if allc else ""))
+            self._dd(self.dyn, "因变量（数值列）", num, 0)
+            self._dd(self.dyn, "分组变量（≥2 组）", allc, 2, default=grp)
+        elif t == "Friedman 检验":
+            num = self._numeric_columns()
+            if len(num) < 2:
+                ctk.CTkLabel(self.dyn, text="（需要至少 2 个测量条件列）",
+                             font=ctk.CTkFont(size=12), text_color="gray45").grid(
+                    row=0, column=0, sticky="w", padx=4, pady=4)
+                return
+            ctk.CTkLabel(self.dyn, text="勾选测量条件列（同一批对象）：",
+                         font=ctk.CTkFont(size=12)).grid(row=0, column=0, sticky="w", padx=4, pady=(2, 2))
+            for i, c in enumerate(num):
+                var = ctk.BooleanVar(value=False)
+                self._col_vars[c] = var
+                ctk.CTkCheckBox(self.dyn, text=str(c), variable=var).grid(
+                    row=i + 1, column=0, sticky="w", padx=4, pady=1)
+        elif t == "事后多重比较":
+            num = self._numeric_columns()
+            allc = self._all_columns()
+            grp = next((c for c in allc if c not in num), (allc[0] if allc else ""))
+            self._dd(self.dyn, "因变量（数值列）", num, 0)
+            self._dd(self.dyn, "分组变量（≥3 组）", allc, 2, default=grp)
+            self._dd(self.dyn, "比较方法", ["Tukey HSD", "LSD", "Bonferroni"], 4)
+        elif t == "单样本 t 检验":
+            num = self._numeric_columns()
+            if not num:
+                ctk.CTkLabel(self.dyn, text="（数据中没有数值列）",
+                             font=ctk.CTkFont(size=12), text_color="gray45").grid(
+                    row=0, column=0, sticky="w", padx=4, pady=4)
+                return
+            self._dd(self.dyn, "变量列", num, 0)
+            ctk.CTkLabel(self.dyn, text="检验值 μ0（默认 0）", font=ctk.CTkFont(size=12)).grid(
+                row=2, column=0, sticky="w", padx=4, pady=(4, 1))
+            mu_entry = ctk.CTkEntry(self.dyn, placeholder_text="例如：5")
+            mu_entry.grid(row=3, column=0, sticky="ew", padx=4, pady=(0, 4))
+            mu_entry.insert(0, "0")
+            self.dyn_widgets.append(mu_entry)
+        elif t == "比例检验":
+            cat = self._cat_columns()
+            if not cat:
+                ctk.CTkLabel(self.dyn, text="（数据中没有分类列）",
+                             font=ctk.CTkFont(size=12), text_color="gray45").grid(
+                    row=0, column=0, sticky="w", padx=4, pady=4)
+                return
+            self._dd(self.dyn, "分类变量（二分类）", cat, 0)
+            ctk.CTkLabel(self.dyn, text="成功水平（留空自动）", font=ctk.CTkFont(size=12)).grid(
+                row=2, column=0, sticky="w", padx=4, pady=(4, 1))
+            succ_entry = ctk.CTkEntry(self.dyn, placeholder_text="自动：数值列取 1，文本取第 2 个水平")
+            succ_entry.grid(row=3, column=0, sticky="ew", padx=4, pady=(0, 4))
+            ctk.CTkLabel(self.dyn, text="检验比例 p0（默认 0.5）", font=ctk.CTkFont(size=12)).grid(
+                row=4, column=0, sticky="w", padx=4, pady=(4, 1))
+            p0_entry = ctk.CTkEntry(self.dyn, placeholder_text="例如：0.5")
+            p0_entry.grid(row=5, column=0, sticky="ew", padx=4, pady=(0, 4))
+            p0_entry.insert(0, "0.5")
+            self.dyn_widgets += [succ_entry, p0_entry]
+        elif t == "McNemar 检验":
+            cat = self._cat_columns()
+            if len(cat) < 2:
+                ctk.CTkLabel(self.dyn, text="（需要至少 2 个二分类列）",
+                             font=ctk.CTkFont(size=12), text_color="gray45").grid(
+                    row=0, column=0, sticky="w", padx=4, pady=4)
+                return
+            self._dd(self.dyn, "变量 1（二分类）", cat, 0)
+            self._dd(self.dyn, "变量 2（二分类）", cat, 2, default=cat[1])
+        elif t == "逻辑回归":
+            cat = self._cat_columns()
+            num = self._numeric_columns()
+            if not cat:
+                ctk.CTkLabel(self.dyn, text="（数据中没有二分类因变量）",
+                             font=ctk.CTkFont(size=12), text_color="gray45").grid(
+                    row=0, column=0, sticky="w", padx=4, pady=4)
+                return
+            self._dd(self.dyn, "因变量 Y（二分类）", cat, 0)
+            ctk.CTkLabel(self.dyn, text="勾选自变量（数值列）：",
+                         font=ctk.CTkFont(size=12)).grid(row=2, column=0, sticky="w", padx=4, pady=(2, 2))
+            for i, c in enumerate(num):
+                var = ctk.BooleanVar(value=False)
+                self._col_vars[c] = var
+                ctk.CTkCheckBox(self.dyn, text=str(c), variable=var).grid(
+                    row=i + 3, column=0, sticky="w", padx=4, pady=1)
+        elif t == "多元线性回归":
+            num = self._numeric_columns()
+            if len(num) < 3:
+                ctk.CTkLabel(self.dyn, text="（需要至少 3 个数值列：1 个因变量 + 2 个自变量）",
+                             font=ctk.CTkFont(size=12), text_color="gray45").grid(
+                    row=0, column=0, sticky="w", padx=4, pady=4)
+                return
+            self._dd(self.dyn, "因变量 Y（数值列）", num, 0)
+            ctk.CTkLabel(self.dyn, text="勾选自变量（≥2 个数值列）：",
+                         font=ctk.CTkFont(size=12)).grid(row=2, column=0, sticky="w", padx=4, pady=(2, 2))
+            for i, c in enumerate(num):
+                var = ctk.BooleanVar(value=False)
+                self._col_vars[c] = var
+                ctk.CTkCheckBox(self.dyn, text=str(c), variable=var).grid(
+                    row=i + 3, column=0, sticky="w", padx=4, pady=1)
+        elif t == "信度分析 (Cronbach's α)":
+            num = self._numeric_columns()
+            if len(num) < 2:
+                ctk.CTkLabel(self.dyn, text="（需要至少 2 个题项列）",
+                             font=ctk.CTkFont(size=12), text_color="gray45").grid(
+                    row=0, column=0, sticky="w", padx=4, pady=4)
+                return
+            ctk.CTkLabel(self.dyn, text="勾选题项列（≥2）：",
+                         font=ctk.CTkFont(size=12)).grid(row=0, column=0, sticky="w", padx=4, pady=(2, 2))
+            for i, c in enumerate(num):
+                var = ctk.BooleanVar(value=False)
+                self._col_vars[c] = var
+                ctk.CTkCheckBox(self.dyn, text=str(c), variable=var).grid(
+                    row=i + 1, column=0, sticky="w", padx=4, pady=1)
 
     def _cat_columns(self):
         """分类列：非数值列，或取值很少的数值列。"""
@@ -480,6 +637,11 @@ class DataPage(ctk.CTkFrame):
         elif pt == "正态 Q-Q 图":
             self._dd2("变量列", num, 0)
         elif pt == "分组箱线图":
+            allc = self._all_columns()
+            grp = next((c for c in allc if c not in num), (allc[0] if allc else ""))
+            self._dd2("数值列", num, 0)
+            self._dd2("分组列", allc, 1, default=grp)
+        elif pt in ("小提琴图（分组分布）", "误差棒图（均值±SE）"):
             allc = self._all_columns()
             grp = next((c for c in allc if c not in num), (allc[0] if allc else ""))
             self._dd2("数值列", num, 0)
@@ -568,6 +730,86 @@ class DataPage(ctk.CTkFrame):
                     return
                 self.paired = paired_t_test(self.df, pre_c, post_c, alpha=alpha)
                 self._print_paired(self.paired)
+            elif t == "Mann-Whitney U":
+                v_dd, g_dd = self.dyn_widgets
+                if not self._distinct(v_dd.get(), g_dd.get(), "因变量与分组变量"):
+                    return
+                self.mw = mannwhitney_u_test(self.df, v_dd.get(), g_dd.get(), alpha=alpha)
+                self._print_mannwhitney(self.mw)
+            elif t == "Wilcoxon 符号秩":
+                pre_dd, post_dd = self.dyn_widgets
+                if not self._distinct(pre_dd.get(), post_dd.get(), "前测列与后测列"):
+                    return
+                self.wsr = wilcoxon_signed_rank(self.df, pre_dd.get(), post_dd.get(), alpha=alpha)
+                self._print_wilcoxon(self.wsr)
+            elif t == "Kruskal-Wallis":
+                v_dd, g_dd = self.dyn_widgets
+                if not self._distinct(v_dd.get(), g_dd.get(), "因变量与分组变量"):
+                    return
+                self.kw = kruskal_wallis_test(self.df, v_dd.get(), g_dd.get(), alpha=alpha)
+                self._print_kruskal(self.kw)
+            elif t == "Friedman 检验":
+                cols = self._selected_cols()
+                if len(cols) < 2:
+                    self._write("请至少勾选 2 个测量条件列。")
+                    return
+                self.fried = friedman_test(self.df, cols, alpha=alpha)
+                self._print_friedman(self.fried)
+            elif t == "事后多重比较":
+                v_dd, g_dd, m_dd = self.dyn_widgets
+                if not self._distinct(v_dd.get(), g_dd.get(), "因变量与分组变量"):
+                    return
+                method_map = {"Tukey HSD": "Tukey", "LSD": "LSD", "Bonferroni": "Bonferroni"}
+                self.post = posthoc_test(self.df, v_dd.get(), g_dd.get(),
+                                         method=method_map[m_dd.get()], alpha=alpha)
+                self._print_posthoc(self.post)
+            elif t == "单样本 t 检验":
+                col_dd, mu_entry = self.dyn_widgets
+                mu = self._parse_float(mu_entry.get(), "检验值 μ0")
+                self.osamp = one_sample_t_test(self.df, col_dd.get(), mu=mu, alpha=alpha)
+                self._print_onesample(self.osamp)
+            elif t == "比例检验":
+                col_dd, succ_entry, p0_entry = self.dyn_widgets
+                sv = succ_entry.get().strip() or None
+                if sv is not None:
+                    try:
+                        sv = float(sv)
+                    except ValueError:
+                        pass
+                p0 = self._parse_float(p0_entry.get(), "检验比例 p0")
+                self.prop = proportion_test(self.df, col_dd.get(), success_value=sv, p0=p0, alpha=alpha)
+                self._print_proportion(self.prop)
+            elif t == "McNemar 检验":
+                c1_dd, c2_dd = self.dyn_widgets
+                if not self._distinct(c1_dd.get(), c2_dd.get(), "两个变量"):
+                    return
+                self.mcn = mcnemar_test(self.df, c1_dd.get(), c2_dd.get(), alpha=alpha)
+                self._print_mcnemar(self.mcn)
+            elif t == "逻辑回归":
+                y_dd = self.dyn_widgets[0]
+                y_col = y_dd.get()
+                xs = [c for c in self._selected_cols() if c != y_col]
+                if not xs:
+                    self._write("请至少勾选 1 个自变量。")
+                    return
+                self.logreg = logistic_regression(self.df, y_col, xs, alpha=alpha)
+                self._print_logistic(self.logreg)
+            elif t == "多元线性回归":
+                y_dd = self.dyn_widgets[0]
+                y_col = y_dd.get()
+                xs = [c for c in self._selected_cols() if c != y_col]
+                if len(xs) < 2:
+                    self._write("多元线性回归请至少勾选 2 个自变量。")
+                    return
+                self.multireg = multiple_linear_regression(self.df, y_col, xs, alpha=alpha)
+                self._print_multireg(self.multireg)
+            elif t == "信度分析 (Cronbach's α)":
+                cols = self._selected_cols()
+                if len(cols) < 2:
+                    self._write("请至少勾选 2 个题项列。")
+                    return
+                self.cron = cronbach_alpha(self.df, cols)
+                self._print_cronbach(self.cron)
         except Exception as e:
             self._write(f"出错：{e}")
         # 记录分析历史
@@ -660,6 +902,169 @@ class DataPage(ctk.CTkFrame):
         except Exception:
             pass
 
+    def _parse_float(self, s, what):
+        try:
+            return float(s)
+        except ValueError:
+            raise ValueError(f"请输入有效的{what}（当前：{s}）。")
+
+    # ---------- v1.4.0 新增：非参 / 事后 / 单样本 / 比例 / McNemar / 回归 / 信度 ----------
+    def _print_mannwhitney(self, r):
+        self._write("【Mann-Whitney U 检验】")
+        self._write(f"因变量：{r['因变量']}；分组变量：{r['分组变量']}")
+        self._write(f"{r['水平1']}：n={r['n1']}，中位数={r['中位数1']:.4f}")
+        self._write(f"{r['水平2']}：n={r['n2']}，中位数={r['中位数2']:.4f}")
+        self._write(f"U 统计量={r['U 统计量']:.1f}，p 值={format_p(r['p 值'])}")
+        self._write(f"效应量（秩双列相关）={r['效应量(秩双列相关)']:.4f}")
+        self._write(f"\n结论：{r['结论']}")
+        self._write("解读：比较两组中位数/分布是否不同。当数据不服从正态分布、样本量较小"
+                    "或为有序等级数据时，用它替代独立样本 t 检验。")
+
+    def _print_wilcoxon(self, r):
+        self._write("【Wilcoxon 符号秩检验】")
+        self._write(f"前测：{r['前测列']}；后测：{r['后测列']}；样本对={r['样本对']}")
+        self._write(f"中位数差(后-前)={r['中位数差(后-前)']:.4f}")
+        self._write(f"W 统计量={r['W 统计量']:.1f}，p 值={format_p(r['p 值'])}")
+        reff = r["效应量 r"]
+        self._write(f"效应量 r={reff:.4f}")
+        self._write(f"\n结论：{r['结论']}")
+        self._write("解读：同一批对象的两次测量（前后测/配对）比较中位数差。配对差值不服从"
+                    "正态分布时，用它替代配对 t 检验。")
+
+    def _print_kruskal(self, r):
+        self._write("【Kruskal-Wallis H 检验】")
+        self._write(f"因变量：{r['因变量']}；分组变量：{r['分组变量']}（{r['组数']} 组）")
+        self._write(f"样本量={r['样本量']}，H 统计量={r['H 统计量']:.4f}，自由度={r['自由度']}")
+        self._write(f"p 值={format_p(r['p 值'])}；效应量 ε²={r['效应量 ε²']:.4f}")
+        self._write("各组中位数：" + "；".join(f"{k}={v:.4f}" for k, v in r["组中位数"].items()))
+        self._write(f"\n结论：{r['结论']}")
+        self._write("解读：多组独立样本（≥3 组）比较中位数/分布。数据不满足正态性、方差齐性时，"
+                    "用它替代单因素 ANOVA；显著后应再做「事后多重比较」。")
+        try:
+            fig = sp.boxplot_by_group(self.df, r["因变量"], r["分组变量"])
+            self.figures.append((fig, "Kruskal-Wallis 分组箱线图"))
+            self._show_figure(fig)
+        except Exception:
+            pass
+
+    def _print_friedman(self, r):
+        self._write("【Friedman 检验】")
+        self._write(f"测量条件：{'、'.join(r['测量条件'])}；样本量={r['样本量']}")
+        self._write(f"Q 统计量={r['Q 统计量']:.4f}，自由度={r['自由度']}，p 值={format_p(r['p 值'])}")
+        kendall_w = r["Kendall's W"]
+        self._write(f"Kendall's W={kendall_w:.4f}")
+        self._write("各条件中位数：" + "；".join(f"{k}={v:.4f}" for k, v in r["各条件中位数"].items()))
+        self._write(f"\n结论：{r['结论']}")
+        self._write("解读：同一批对象在 ≥3 个条件下重复测量（如 3 个时间点），比较不同条件的分布。"
+                    "数据不满足正态/球对称假设时，用它替代重复测量 ANOVA。")
+        try:
+            fig = sp.line_plot(self.df, r["测量条件"], title="各条件测量值对比")
+            self.figures.append((fig, "Friedman 各条件折线图"))
+            self._show_figure(fig)
+        except Exception:
+            pass
+
+    def _print_posthoc(self, r):
+        self._write(f"【事后多重比较（{r['方法']}）】")
+        self._write(f"因变量：{r['因变量']}；分组变量：{r['分组变量']}；共比较 {r['比较对数']} 对")
+        self._show_table(r["比较结果表"].reset_index(), f"事后多重比较（{r['方法']}）")
+        self._write(f"\n结论：{r['结论']}")
+        self._write("解读：ANOVA 或 Kruskal-Wallis 显著后，用它确定具体哪两组不同。"
+                    "Tukey 控制总体错误率（最常用）；Bonferroni 最保守、易漏检；LSD 最敏感但假阳性风险高。")
+
+    def _print_onesample(self, r):
+        self._write("【单样本 t 检验】")
+        self._write(f"变量：{r['变量']}；样本量={r['样本量']}；检验值 μ0={r['检验值 μ0']}")
+        self._write(f"均值={r['均值']:.4f}，标准差={r['标准差']:.4f}")
+        self._write(f"t 统计量={r['t 统计量']:.4f}，自由度={r['自由度']}，p 值={format_p(r['p 值'])}")
+        ci = r["95%CI"]
+        self._write(f"均值 95%CI=[{ci[0]:.4f}, {ci[1]:.4f}]")
+        cohens_d = r["Cohen's d"]
+        self._write(f"Cohen's d={cohens_d:.4f}（{r['效应量评价']}）")
+        self._write(f"\n结论：{r['结论']}")
+        self._write("解读：检验单个变量的均值是否等于某个已知值（如标准值/理论值）。"
+                    "数据近似正态且样本量≥30 时适用；否则可配合 Wilcoxon 符号秩检验。")
+
+    def _print_proportion(self, r):
+        self._write("【二项比例检验】")
+        self._write(f"变量：{r['变量']}；成功水平={r['成功水平']}；样本量={r['样本量']}")
+        self._write(f"成功数={r['成功数']}，样本比例={r['样本比例']:.4f}，检验比例 p0={r['检验比例 p0']}")
+        self._write(f"近似 z={r['z 统计量(近似)']:.4f}（p={format_p(r['近似 p 值'])}）")
+        self._write(f"精确 p 值（Binomial）={format_p(r['精确 p 值(Binomial)'])}")
+        ci = r["95%CI(Wilson)"]
+        self._write(f"95%CI(Wilson)=[{ci[0]:.4f}, {ci[1]:.4f}]")
+        self._write(f"\n结论：{r['结论']}")
+        self._write("解读：检验二分类数据中某一水平所占比例是否等于理论值 p0（如合格率是否≥90%）。"
+                    "小样本看精确 p 值，大样本看近似 z 检验，二者通常结论一致。")
+        try:
+            fig = sp.proportion_bar_plot(
+                [r["样本量"] - r["成功数"], r["成功数"]],
+                [f"非{r['成功水平']}", str(r["成功水平"])],
+                title=f"{r['变量']} 二分类比例分布")
+            self.figures.append((fig, "比例分布柱状图"))
+            self._show_figure(fig)
+        except Exception:
+            pass
+
+    def _print_mcnemar(self, r):
+        self._write("【McNemar 配对卡方检验】")
+        self._write(f"变量1：{r['变量1']}；变量2：{r['变量2']}；样本量={r['样本量']}")
+        self._show_table(r["列联表"].reset_index(), "McNemar 配对列联表")
+        self._write(f"McNemar χ²(校正)={r['McNemar χ²(校正)']:.4f}，p 值={format_p(r['p 值'])}")
+        self._write(f"精确 p 值（Binomial）={format_p(r['精确 p 值(Binomial)'])}")
+        self._write(f"不一致对数={r['不一致对数']}，一致率={r['一致率']:.4f}")
+        self._write(f"\n结论：{r['结论']}")
+        self._write("解读：同一批对象在两种方法/两次判断下各自给出「是/否」结果，检验两者结果"
+                    "是否存在系统性差异。只关注不一致的格子（对角一致格子不参与判断）。")
+
+    def _print_logistic(self, r):
+        self._write("【二分类逻辑回归】")
+        self._write(f"因变量：{r['因变量']}（成功水平={r['成功水平']}）；自变量：{'、'.join(r['自变量'])}")
+        self._write(f"样本量={r['样本量']}，McFadden R²={r['McFadden R²']:.4f}")
+        self._write(f"整体似然比 p={format_p(r['整体似然比 p'])}，准确率={r['准确率']:.4f}，AUC={r['AUC']:.4f}")
+        self._show_table(r["系数表"], "逻辑回归系数表")
+        self._write(f"\n结论：{r['结论']}")
+        self._write("解读：系数 B 的指数 exp(B)=OR 表示自变量每增加 1 单位，成功概率的胜算变化倍数"
+                    "（OR>1 提高、<1 降低）。AUC 越接近 1 判别力越强（0.7 以上可接受）。"
+                    "适用于因变量为二分类（如是否患病）的预测/影响因素研究。")
+        try:
+            fig = sp.roc_curve_plot(r["实际标签"], r["预测概率"],
+                                    title=f"{r['因变量']} 逻辑回归 ROC 曲线")
+            self.figures.append((fig, "逻辑回归 ROC 曲线"))
+            self._show_figure(fig)
+        except Exception:
+            pass
+
+    def _print_multireg(self, r):
+        self._write("【多元线性回归】")
+        self._write(f"因变量：{r['因变量']}；自变量：{'、'.join(r['自变量'])}；样本量={r['样本量']}")
+        self._write(f"R²={r['R²']:.4f}，调整 R²={r['调整 R²']:.4f}，F={r['F 统计量']:.4f}，"
+                    f"p={format_p(r['整体 p 值'])}")
+        self._write(f"Durbin-Watson={r['Durbin-Watson']:.4f}（接近 2 说明残差无自相关）")
+        self._write(f"RMSE={r['RMSE']:.4f}，AIC={r['AIC']:.1f}，BIC={r['BIC']:.1f}")
+        self._show_table(r["系数表"], "多元回归系数表")
+        self._show_table(r["VIF 表"], "共线性诊断（VIF）")
+        self._write(f"\n结论：{r['结论']}")
+        self._write("解读：多个自变量同时预测一个连续因变量。看单个自变量时用系数表和 p 值；"
+                    "VIF≥10 提示该变量与其他自变量高度共线，建议剔除；DW 明显偏离 2 提示残差自相关。")
+        try:
+            fig = sp.regression_residual_plot(r)
+            self.figures.append((fig, "多元回归残差图"))
+            self._show_figure(fig)
+        except Exception:
+            pass
+
+    def _print_cronbach(self, r):
+        self._write("【信度分析（Cronbach's α）】")
+        self._write(f"样本量={r['样本量']}，题项数={r['题项数']}")
+        alpha_val = r["Cronbach's α"]
+        self._write(f"Cronbach's α={alpha_val:.4f}，标准化 α={r['标准化 α']:.4f}")
+        self._write(f"平均项间相关={r['平均项间相关']:.4f}")
+        self._show_table(r["删除题项后 α"].reset_index(), "删除各题项后的 α")
+        self._write(f"\n结论：{r['结论']}")
+        self._write("解读：问卷/量表的内部一致性检验。若某题项「删除后 α」明显升高，说明该题"
+                    "与其他题项不一致，可考虑删去。α≥0.7 一般可接受。")
+
     # ================= 绘图 =================
     def _plot(self):
         if self.df is None:
@@ -680,6 +1085,35 @@ class DataPage(ctk.CTkFrame):
                 if not self._distinct(w[0].get(), w[1].get(), "数值列与分组列"):
                     return
                 fig = sp.boxplot_by_group(self.df, w[0].get(), w[1].get())
+            elif pt == "小提琴图（分组分布）":
+                if not self._distinct(w[0].get(), w[1].get(), "数值列与分组列"):
+                    return
+                fig = sp.violin_by_group(self.df, w[0].get(), w[1].get())
+            elif pt == "误差棒图（均值±SE）":
+                if not self._distinct(w[0].get(), w[1].get(), "数值列与分组列"):
+                    return
+                fig = sp.errorbar_by_group(self.df, w[0].get(), w[1].get(), error="sd")
+            elif pt == "相关矩阵热图":
+                fig = sp.correlation_heatmap(self.df)
+            elif pt == "回归森林图":
+                coef = None
+                if getattr(self, "multireg", None):
+                    coef = self.multireg.get("系数表")
+                elif getattr(self, "logreg", None):
+                    coef = self.logreg.get("系数表")
+                elif getattr(self, "reg", None):
+                    # 简单线性回归：把 常数项/斜率 系数与 CI 拼成系数表
+                    r = self.reg
+                    coef = pd.DataFrame({
+                        "变量": ["常数项", "斜率"],
+                        "系数": [r["b0"], r["b1"]],
+                        "95%下限": [r["b0"] - 1.96 * r["se0"], r["b1"] - 1.96 * r["se1"]],
+                        "95%上限": [r["b0"] + 1.96 * r["se0"], r["b1"] + 1.96 * r["se1"]],
+                    })
+                if coef is None:
+                    self._write("请先运行 回归分析 / 逻辑回归 / 多元回归，再绘制森林图。")
+                    return
+                fig = sp.regression_forest_plot(coef)
             else:
                 return
             self.figures.append((fig, pt))
@@ -710,7 +1144,7 @@ class DataPage(ctk.CTkFrame):
             return
         f = filedialog.asksaveasfilename(
             defaultextension=".docx",
-            filetypes=[("Word 文档", "*.docx")],
+            filetypes=[("Word 文档", "*.docx"), ("PDF 文档", "*.pdf")],
             initialfile="统计分析报告.docx",
         )
         if not f:
@@ -724,15 +1158,47 @@ class DataPage(ctk.CTkFrame):
                 reg=self.reg,
                 figures=self.figures or None,
                 alpha=float(self.alpha_dd.get()),
+                chi2=self.chi2, anova=self.anova, corr=self.corr,
+                paired=self.paired, mw=self.mw, wsr=self.wsr,
+                kw=self.kw, fried=self.fried, post=self.post,
+                osamp=self.osamp, prop=self.prop, mcn=self.mcn,
+                logreg=self.logreg, multireg=self.multireg, cron=self.cron,
             )
-            with open(f, "wb") as fp:
-                fp.write(data)
-            self._write(f"报告已导出：{f}")
-            if getattr(self, "history", None):
-                self.history.log_op("数据分析", "导出Word报告", f)
-            messagebox.showinfo("导出完成", f"Word 报告已保存到：\n{f}")
+            if f.lower().endswith(".pdf"):
+                self._save_pdf(data, f)
+            else:
+                with open(f, "wb") as fp:
+                    fp.write(data)
+                self._write(f"报告已导出：{f}")
+                if getattr(self, "history", None):
+                    self.history.log_op("数据分析", "导出Word报告", f)
+                messagebox.showinfo("导出完成", f"Word 报告已保存到：\n{f}")
         except Exception as e:
             self._write(f"导出失败：{e}")
+            messagebox.showerror("导出失败", str(e))
+
+    def _save_pdf(self, docx_bytes, pdf_path):
+        """把 Word 报告字节转成 PDF：借助本机 MS Word（docx2pdf）。
+
+        无 Word 时优雅降级：另存一份 .docx 并提示用户可用 Word/WPS 打开后另存为 PDF。
+        """
+        tmp_docx = pdf_path.rsplit(".", 1)[0] + ".docx"
+        with open(tmp_docx, "wb") as fp:
+            fp.write(docx_bytes)
+        try:
+            from docx2pdf import convert
+            convert(tmp_docx, pdf_path)
+            self._write(f"PDF 报告已导出：{pdf_path}")
+            if getattr(self, "history", None):
+                self.history.log_op("数据分析", "导出PDF报告", pdf_path)
+            messagebox.showinfo("导出完成", f"PDF 报告已保存到：\n{pdf_path}")
+        except Exception as e:
+            self._write(f"本机未安装 MS Word，无法直接转 PDF：{e}\n已同时保存 Word 版：{tmp_docx}")
+            messagebox.showinfo(
+                "PDF 未生成",
+                f"需要本机安装 Microsoft Word 才能一键转 PDF。\n\n"
+                f"已为您保存 Word 版报告：\n{tmp_docx}\n\n"
+                f"打开后「另存为」选择 PDF 即可（或用 WPS 打开后导出 PDF）。")
 
     # ================= AI 解读 =================
     def _ai_interpret(self):

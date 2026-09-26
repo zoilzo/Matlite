@@ -7,7 +7,7 @@
 ; Made by zoilzo & Claude
 
 #define MyAppName "MatLite 数学工作台"
-#define MyAppVersion "1.3.0"
+#define MyAppVersion "1.8.0"
 #define MyAppPublisher "zoilzo"
 #define MyAppExeName "MatLite.exe"
 #define MyAppIcon "assets\MatLite.ico"
@@ -22,10 +22,10 @@ AppPublisherURL=https://github.com/zoilzo/MatLite
 AppSupportURL=https://github.com/zoilzo/MatLite/issues
 AppComments=MatLite 数学工作台 - 本地单机的数学与统计工具 - Made by zoilzo & Claude
 AppCopyright=Copyright (C) 2026 zoilzo & Claude
-VersionInfoVersion=1.3.0
+VersionInfoVersion=1.8.0
 VersionInfoDescription=MatLite 数学工作台
 VersionInfoProductName=MatLite
-VersionInfoProductVersion=1.3.0
+VersionInfoProductVersion=1.8.0
 DefaultGroupName=MatLite
 DisableProgramGroupPage=yes
 PrivilegesRequired=lowest
