@@ -40,7 +40,7 @@
 ## ⬇️ 下载
 
 - [MatLiteSetup.exe（安装包）](./MatLiteSetup.exe)
-- [MatLite-便携版.zip（免安装）](./MatLite-便携版.zip)
+- [MatLite-portable.zip（免安装）](./MatLite-portable.zip)
 
 ---
 *Made by zoilzo & Claude*
