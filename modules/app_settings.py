@@ -12,7 +12,7 @@ import tempfile
 import shutil
 
 # 当前应用版本（版本号唯一来源，app/反馈/帮助中心都从这里读）
-APP_VERSION = "1.8.0"
+APP_VERSION = "2.0.0"
 
 DEFAULTS = {
     "theme": "浅色",        # 浅色 / 深色
@@ -24,6 +24,7 @@ DEFAULTS = {
     "announce_on": True,    # 是否接收公告与更新提醒
     "announce_url": "https://raw.githubusercontent.com/zoilzo/MatLite/main/announce.json",  # 免费静态托管公告地址（留空=关闭）
     "release_repo": "zoilzo/MatLite",  # 版本检查的 GitHub 仓库
+    "plugin_store": "https://raw.githubusercontent.com/zoilzo/MatLite-plugins/main/store.json",  # 在线插件商店清单地址
     # ---- AI 助手 ----
     "base_url": "http://localhost:11434",  # 本地/云端大模型服务地址
     "mode": "Ollama 原生接口（推荐）",        # Ollama 原生接口（推荐）/ OpenAi 兼容接口

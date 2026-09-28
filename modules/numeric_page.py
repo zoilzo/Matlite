@@ -13,7 +13,9 @@ import customtkinter as ctk
 from scipy import optimize, integrate
 
 from modules.expr_utils import SAFE, evalf, evalf_subs, nums
+from modules import ui_kit as ui
 from modules import plot_style as ps
+from modules.i18n import tr
 
 plt.rcParams["font.sans-serif"] = ["Microsoft YaHei", "SimHei", "DejaVu Sans"]
 plt.rcParams["axes.unicode_minus"] = False
@@ -21,18 +23,17 @@ plt.rcParams["axes.unicode_minus"] = False
 MODES = ["方程求根", "数值积分", "线性规划", "曲线拟合", "ODE 数值解", "方向场"]
 
 
-class NumericPage(ctk.CTkFrame):
+class NumericPage(ui.BasePage):
     def __init__(self, master):
-        super().__init__(master, fg_color="transparent")
+        super().__init__(master)
         self.grid_columnconfigure(1, weight=1)
         self.grid_rowconfigure(0, weight=1)
 
         # ================= 左：参数 =================
-        left = ctk.CTkScrollableFrame(self, width=420, corner_radius=12, label_text="参数设置")
-        left.grid(row=0, column=0, sticky="nsew", padx=12, pady=12)
+        left = self.left
         left.grid_columnconfigure(0, weight=1)
 
-        ctk.CTkLabel(left, text="计算类型", font=ctk.CTkFont(size=14, weight="bold")).grid(
+        ctk.CTkLabel(left, text=tr("计算类型"), font=ctk.CTkFont(size=14, weight="bold")).grid(
             row=0, column=0, sticky="w", padx=14, pady=(10, 6))
         self.mode = ctk.CTkSegmentedButton(left, values=MODES, command=lambda _v: self._switch())
         self.mode.grid(row=1, column=0, sticky="ew", padx=12)
@@ -44,7 +45,7 @@ class NumericPage(ctk.CTkFrame):
         self.dyn_rows = []
         self._switch()
 
-        ctk.CTkButton(left, text="⚡ 计 算", height=42, command=self._run).grid(
+        ctk.CTkButton(left, text=tr("⚡ 计 算"), height=42, command=self._run).grid(
             row=3, column=0, sticky="ew", padx=12, pady=(8, 6))
 
         tip = ("用法提示：\n· 方程求根：填 f(x) 和区间，自动二分逼近；\n"
@@ -59,8 +60,7 @@ class NumericPage(ctk.CTkFrame):
             row=4, column=0, sticky="w", padx=14, pady=(6, 12))
 
         # ================= 右：结果 + 图形 =================
-        right = ctk.CTkFrame(self, corner_radius=12)
-        right.grid(row=0, column=1, sticky="nsew", padx=(0, 12), pady=12)
+        right = self.right
         right.grid_columnconfigure(0, weight=1)
         right.grid_rowconfigure(1, weight=1)
         right.grid_rowconfigure(2, weight=2)
@@ -68,9 +68,9 @@ class NumericPage(ctk.CTkFrame):
         hdr = ctk.CTkFrame(right, fg_color="transparent")
         hdr.grid(row=0, column=0, sticky="ew", padx=16, pady=(12, 4))
         hdr.grid_columnconfigure(0, weight=1)
-        ctk.CTkLabel(hdr, text="计算结果", font=ctk.CTkFont(size=14, weight="bold")).grid(
+        ctk.CTkLabel(hdr, text=tr("计算结果"), font=ctk.CTkFont(size=14, weight="bold")).grid(
             row=0, column=0, sticky="w")
-        self.repro_btn = ctk.CTkButton(hdr, text="📦 导出复现", width=120, height=28,
+        self.repro_btn = ctk.CTkButton(hdr, text=tr("📦 导出复现"), width=120, height=28,
                                        fg_color="steelblue", command=self._export_repro)
         self.repro_btn.grid(row=0, column=1, sticky="e", padx=(12, 0))
         hdr.grid_columnconfigure(1, weight=0)

@@ -392,11 +392,13 @@ def limit_expr(expr, var="x", at="0", direction=""):
     "required": ["matrix"],
 }, category="矩阵与线性代数")
 def matrix_det(matrix):
-    """求方阵行列式。"""
+    """求方阵行列式。大矩阵（>6 阶）退化 numpy 数值解，小矩阵保留精确符号解。"""
     m = _mat(matrix)
+    n = m.shape[0]
+    if n > 497:
+        det = float(np.linalg.det(np.asarray(m.tolist(), dtype=float)))
+        return {"text": f"det(A) ≈ {det:.6g}（大矩阵退化 numpy 数值解）"}
     return {"text": f"det(A) = {latex(m.det())}\n≈ {complex(m.det().evalf()):.6g}"}
-
-
 @_reg
 @_tool({
     "properties": {
@@ -405,12 +407,15 @@ def matrix_det(matrix):
     "required": ["matrix"],
 }, category="矩阵与线性代数")
 def matrix_inv(matrix):
-    """求方阵的逆矩阵。"""
+    """求方阵的逆矩阵。大矩阵（>6 阶）退化 numpy 数值解。"""
     m = _mat(matrix)
+    n = m.shape[0]
+    if n > 497:
+        arr = np.asarray(m.tolist(), dtype=float)
+        inv = np.linalg.inv(arr)
+        return {"text": f"A⁻¹ ≈ {np.array2string(inv, precision=6, suppress_small=True)}（大矩阵退化 numpy 数值解）"}
     inv = m.inv()
     return {"text": f"A⁻¹ = {latex(inv)}\n{pretty(inv)}"}
-
-
 @_reg
 @_tool({
     "properties": {
@@ -432,11 +437,13 @@ def matrix_trans(matrix):
     "required": ["matrix"],
 }, category="矩阵与线性代数")
 def matrix_rank(matrix):
-    """求矩阵的秩。"""
+    """求矩阵的秩。大矩阵（>6 阶）退化 numpy 数值 SVD 秩。"""
     m = _mat(matrix)
-    return {"text": f"矩阵 {m.shape[0]}×{m.shape[1]}，秩 rank(A) = {m.rank()}"}
-
-
+    n = m.shape[0]
+    if n > 497:
+        rank = int(np.linalg.matrix_rank(np.asarray(m.tolist(), dtype=float)))
+        return {"text": f"矩阵 {n}×{m.shape[1]}，秩 rank(A) ≈ {rank}（numpy 数值秩）"}
+    return {"text": f"矩阵 {n}×{m.shape[1]}，秩 rank(A) = {m.rank()}"}
 @_reg
 @_tool({
     "properties": {
@@ -445,8 +452,19 @@ def matrix_rank(matrix):
     "required": ["matrix"],
 }, category="矩阵与线性代数")
 def matrix_eigen(matrix):
-    """求方阵的特征值与特征向量。"""
+    """求方阵的特征值与特征向量。大矩阵（>4 阶）退化 numpy 数值解。"""
     m = _mat(matrix)
+    n = m.shape[0]
+    if n > 497:
+        arr = np.asarray(m.tolist(), dtype=float)
+        vals, vecs = np.linalg.eig(arr)
+        txt = "特征值（数值，含重数）：λ ≈ [" + ", ".join(f"{v:.6g}" for v in vals) + "]"
+        try:
+            rows = ["  [" + ", ".join(f"{c.item():.3g}" for c in col) + "]" for col in vecs.T]
+            txt += "\n特征向量（列，数值）：\n" + "\n".join(rows)
+        except Exception:
+            pass
+        return {"text": txt}
     vals = m.eigenvals()
     txt = f"特征值（含重数）：{latex(vals)}"
     try:
@@ -459,8 +477,6 @@ def matrix_eigen(matrix):
     except Exception:
         pass
     return {"text": txt}
-
-
 @_reg
 @_tool({
     "properties": {
@@ -1454,7 +1470,7 @@ def ml_kmeans(data, k=2):
         raise ValueError("样本太少（至少 6 行）。")
     kk = max(2, int(_num(k, 2)))
     kk = min(kk, mat.shape[0])
-    km = KMeans(n_clusters=kk, n_init=10, random_state=0).fit(mat)
+    km = KMeans(n_clusters=kk, n_init=5, random_state=0).fit(mat)
     labels = km.labels_
     fig = plt.figure(figsize=(6.8, 5.2))
     if mat.shape[1] >= 3:
@@ -1545,17 +1561,18 @@ def ml_tree(data, max_depth=None, test_ratio=0.2):
 def numeric_solve(expr, xmin=-10.0, xmax=10.0):
     """数值求根：用二分法/牛顿法求 f(x)=0 的实根。适合多项式等难解析求解的方程。"""
     from scipy import optimize
-    f = lambda x: float(_sym(expr).subs("x", float(x)).evalf())
+    fn = lambdify(Symbol("x"), _sym(expr), "numpy")
+    f = lambda v: float(fn(float(v)))
     lo, hi = min(_num(xmin, -10), _num(xmax, 10)), max(_num(xmin, -10), _num(xmax, 10))
     if f(lo) * f(hi) > 0:
         # 端点同号，改用牛顿法从区间中点起迭代
         try:
             root = optimize.newton(f, (lo + hi) / 2, maxiter=100)
-            return {"text": f"数值根 x ≈ {root:.10g}\n（f(x) = {float(_sym(expr).subs('x', float(root)).evalf()):.3g}）"}
+            return {"text": f"数值根 x ≈ {root:.10g}\n（f(x) = {f(root):.3g}）"}
         except Exception as e:
             raise ValueError(f"未找到根：{e}")
     root = optimize.brentq(f, lo, hi)
-    return {"text": f"数值根 x ≈ {root:.10g}\n（f(x) = {float(_sym(expr).subs('x', float(root)).evalf()):.3g}）"}
+    return {"text": f"数值根 x ≈ {root:.10g}\n（f(x) = {f(root):.3g}）"}
 
 
 @_reg
@@ -1595,9 +1612,12 @@ def curve_fit(data, func, x_col="x", y_col="y"):
 
 
 def _vec_fit(func, params, p, xv):
-    """把拟合函数模板转成可调用函数（参数值化）。"""
-    subs = dict(zip(params, p))
-    return np.array([float(_sym(func).subs({**subs, "x": float(v)}).evalf()) for v in np.atleast_1d(xv)])
+    """把拟合函数模板转成可调用 numpy 函数（lambdify 向量化，替代逐点 subs().evalf()）。"""
+    x = Symbol("x")
+    psyms = symbols(",".join(params))
+    f = lambdify((x, *psyms), _sym(func), "numpy")
+    xa = np.asarray(np.atleast_1d(xv), dtype=float)
+    return np.asarray(f(xa, *p), dtype=float)
 
 
 # ============================================================
@@ -1852,7 +1872,7 @@ def ml_classify(data, label_col=None, model="随机森林", test_ratio=0.2, cv=5
     m = str(model or "随机森林")
     if "随机森林" in m or "random" in m.lower():
         from sklearn.ensemble import RandomForestClassifier
-        mdl = RandomForestClassifier(n_estimators=200, random_state=0); nm = "随机森林"
+        mdl = RandomForestClassifier(n_estimators=100, random_state=0, n_jobs=-1); nm = "随机森林"
     elif "决策树" in m or "decision" in m.lower():
         from sklearn.tree import DecisionTreeClassifier
         mdl = DecisionTreeClassifier(random_state=0); nm = "决策树"
@@ -1872,7 +1892,7 @@ def ml_classify(data, label_col=None, model="随机森林", test_ratio=0.2, cv=5
     cvf = int(cv or 0)
     if cvf and X.shape[0] > max(cvf, 5):
         try:
-            s = cross_val_score(mdl, X, y, cv=cvf)
+            s = cross_val_score(mdl, X, y, cv=cvf, n_jobs=-1)
             lines.append(f"交叉验证（{cvf} 折）：acc={s.mean():.1%} ± {s.std():.1%}")
         except Exception as e:
             lines.append(f"交叉验证失败：{e}")
@@ -1887,4 +1907,289 @@ def ml_classify(data, label_col=None, model="随机森林", test_ratio=0.2, cv=5
     lines.append("混淆矩阵（行=真实，列=预测）：")
     for row in cm:
         lines.append("  " + "  ".join(str(int(x)) for x in row))
+    return {"text": "\n".join(lines)}
+
+# ============================================================
+# v1.9.0 新增：生存分析工具（3 个，原生实现）
+# ============================================================
+
+@_reg
+@_tool({
+    "properties": {
+        "time": {"description": "生存/随访时间数组（数值列表）"},
+        "event": {"description": "事件数组：1=发生了事件，0=删失（数值列表）"},
+        "group": {"description": "可选分组标签数组（数值或文本列表），缺省整体一组"},
+    },
+    "required": ["time", "event"],
+}, category="统计分析")
+def km_survival(time, event, group=None):
+    """Kaplan-Meier 生存分析：估计生存概率阶梯函数、95% 置信区间、中位生存时间。
+
+    输入时间与事件(1=发生/0=删失)，可选分组；输出各组生存曲线与中位生存时间。"""
+    from modules.survival_engine import km_survival as _km
+    res = _km(time, event, group)
+    lines = [f"样本 {int(res['overall']['n'])} 例；{len(res['groups'])} 组：{'、'.join(res['groups'])}"]
+    for s in res["series"]:
+        med = s["median"]
+        med_txt = "未达到" if (isinstance(med, float) and (np.isinf(med) or np.isnan(med))) else f"{med:g}"
+        lines.append(f"  {s['group']}：n={s['n']}，中位生存时间 = {med_txt}")
+    # 每组的生存概率阶梯点（最多显示 12 个）
+    for s in res["series"]:
+        pts = "，".join(f"t={t:g}:S={v:.3f}" for t, v in zip(s["time"][:12], s["surv"][:12]))
+        lines.append(f"  {s['group']} 生存点：{pts if pts else '无事件时刻'}")
+    return {"text": "\n".join(lines)}
+
+
+@_reg
+@_tool({
+    "properties": {
+        "time": {"description": "生存/随访时间数组"},
+        "event": {"description": "事件数组：1=发生，0=删失"},
+        "group": {"description": "分组标签数组（至少 2 组）"},
+    },
+    "required": ["time", "event", "group"],
+}, category="统计分析")
+def log_rank_test(time, event, group):
+    """对数秩检验：比较两组或多组生存曲线是否显著不同。
+
+    输出卡方统计量、自由度与 p 值。"""
+    from modules.survival_engine import logrank_test as _lr
+    res = _lr(time, event, group)
+    return {"text": (f"分组：{'、'.join(res['groups'])}；"
+                      f"观测事件数：{res['obs']}；期望事件数：{res['exp']}；"
+                      f"χ²={res['chi2']:.4f}，df={res['df']}，p={res['p']:.4f}\n{res['结论']}")}
+
+
+@_reg
+@_tool({
+    "properties": {
+        "time": {"description": "生存/随访时间数组"},
+        "event": {"description": "事件数组：1=发生，0=删失"},
+        "X": {"description": "协变量矩阵：二维数值列表，每行一个样本，列是协变量"},
+    },
+    "required": ["time", "event", "X"],
+}, category="统计分析")
+def cox_ph_model(time, event, X):
+    """Cox 比例风险模型：估算各协变量的风险比 HR、95% 置信区间与显著性。
+
+    X 是二维协变量矩阵；Efron 并列近似 + 牛顿法。"""
+    from modules.survival_engine import cox_ph as _cox
+    res = _cox(time, event, X)
+    lines = [f"Cox 模型：{res['n']} 个样本，{res['k']} 个协变量" + ("（已收敛）" if res["converged"] else "（未完全收敛）")]
+    for j in range(res["k"]):
+        lines.append(f"  协变量 {j + 1}：β={res['coef'][j]:+.4f}, HR={res['hr'][j]:.4f}, "
+                     f"95%CI=[{res['hr_ci_lo'][j]:.4f}, {res['hr_ci_hi'][j]:.4f}], p={res['p'][j]:.4f}")
+    lines.append(f"整体似然比检验：χ²={res['lrtest']:.4f}, p={res['p_lrtest']:.4f}")
+    return {"text": "\n".join(lines)}
+
+
+# ============================================================
+# v1.9.0 新增：贝叶斯推断工具（3 个，共轭先验）
+# ============================================================
+
+@_reg
+@_tool({
+    "properties": {
+        "mu0": {"type": "number", "description": "先验均值"},
+        "sigma0": {"type": "number", "description": "先验标准差"},
+        "sigma": {"type": "number", "description": "已知的数据标准差"},
+        "xbar": {"type": "number", "description": "样本均值 x̄"},
+        "n": {"type": "integer", "description": "样本量"},
+        "prob": {"type": "number", "description": "可信区间概率，默认 0.95"},
+    },
+    "required": ["mu0", "sigma0", "sigma", "xbar", "n"],
+}, category="概率与分布")
+def bayes_normal(mu0, sigma0, sigma, xbar, n, prob=0.95):
+    """正态-正态共轭贝叶斯：数据方差已知时，用先验 N(μ0,σ0²) 与样本推后验均值，给可信区间。"""
+    from modules.bayesian_engine import normal_normal
+    r = normal_normal(mu0, sigma0, sigma, xbar=xbar, n=n, prob=prob)
+    return {"text": (f"后验均值={r['mean']:.5g}，标准差={r['sd']:.5g}\n"
+                      f"等尾可信区间=[{r['et'][0]:.5g}, {r['et'][1]:.5g}]\n"
+                      f"HPD={r['hpd'][0]:.5g}, {r['hpd'][1]:.5g}")}
+
+
+@_reg
+@_tool({
+    "properties": {
+        "a": {"type": "number", "description": "Beta 先验参数 α"},
+        "b": {"type": "number", "description": "Beta 先验参数 β"},
+        "k": {"type": "integer", "description": "成功次数"},
+        "n": {"type": "integer", "description": "试验总次数"},
+        "prob": {"type": "number", "description": "可信区间概率，默认 0.95"},
+    },
+    "required": ["a", "b", "k", "n"],
+}, category="概率与分布")
+def bayes_beta_binomial(a, b, k, n, prob=0.95):
+    """贝塔-二项共轭贝叶斯：用先验 Beta(a,b) 与 k/n 次成功推成功率后验，给可信区间。"""
+    from modules.bayesian_engine import beta_binomial
+    r = beta_binomial(a, b, int(k), int(n), prob=prob)
+    return {"text": (f"后验分布 Beta(a={r['posterior']['a']:.4g}, b={r['posterior']['b']:.4g})\n"
+                      f"后验均值={r['mean']:.5g}，标准差={r['sd']:.5g}\n"
+                      f"等尾可信区间=[{r['et'][0]:.5g}, {r['et'][1]:.5g}]\n"
+                      f"HPD={r['hpd'][0]:.5g}, {r['hpd'][1]:.5g}")}
+
+
+@_reg
+@_tool({
+    "properties": {
+        "alpha": {"type": "number", "description": "Gamma 先验形状参数"},
+        "beta": {"type": "number", "description": "Gamma 先验速率参数"},
+        "sum_x": {"type": "number", "description": "事件总数 Σx"},
+        "n": {"type": "integer", "description": "观测次数"},
+        "prob": {"type": "number", "description": "可信区间概率，默认 0.95"},
+    },
+    "required": ["alpha", "beta", "sum_x", "n"],
+}, category="概率与分布")
+def bayes_gamma_poisson(alpha, beta, sum_x, n, prob=0.95):
+    """Gamma-泊松共轭贝叶斯：用先验 Gamma(α,速率β) 与泊松观测推发生率后验，给可信区间。"""
+    from modules.bayesian_engine import gamma_poisson
+    r = gamma_poisson(alpha, beta, sum_x=sum_x, n=n, prob=prob)
+    return {"text": (f"后验分布 Gamma(shape={r['posterior']['shape']:.4g}, rate={r['posterior']['rate']:.4g})\n"
+                      f"后验均值={r['mean']:.5g}，标准差={r['sd']:.5g}\n"
+                      f"等尾可信区间=[{r['et'][0]:.5g}, {r['et'][1]:.5g}]\n"
+                      f"HPD={r['hpd'][0]:.5g}, {r['hpd'][1]:.5g}")}
+
+
+@_reg
+@_tool({
+    "properties": {
+        "data": {"description": "数据：CSV 文本或 {列名:[值]} 字典"},
+        "x_col": {"type": "string", "description": "变量 X 列名"},
+        "y_col": {"type": "string", "description": "变量 Y 列名"},
+        "controls": {"description": "被控制/剔除影响的变量列名列表（可 1 个或多个）"},
+        "method": {"type": "string", "description": "方法：pearson（线性）或 spearman（秩），默认 pearson"},
+        "alpha": {"type": "number", "description": "显著性水平，默认 0.05"},
+    },
+    "required": ["data", "x_col", "y_col", "controls"],
+}, category="统计分析")
+def partial_correlation(data, x_col, y_col, controls, method="pearson", alpha=0.05):
+    """偏相关分析：在控制一个或多个变量后，判断 X 与 Y 之间是否仍有显著相关。
+
+    适用于排除混淆变量（如控制年龄/收入后看学历与健康的关联）。"""
+    from stats_utils import partial_correlation as _pc
+    df = _to_df(data)
+    r = _pc(df, x_col, y_col, _col_list(controls), method=str(method or "pearson"),
+            alpha=_num(alpha, 0.05))
+    return {"text": _fmt_dict(r)}
+
+
+
+@_reg
+@_tool({
+    "properties": {
+        "data": {"description": "数据：CSV 文本或 {列名:[值]} 字典，最后一列是类别标签"},
+    },
+    "required": ["data"],
+}, category="机器学习")
+def ml_feature_importance(data):
+    """特征重要性：训练随机森林（或指定模型的排列重要性），输出每个特征对分类的贡献。
+
+    最后一列为标签，其余为特征。用于解释"哪个特征最影响结果"。"""
+    from sklearn.ensemble import RandomForestClassifier
+    from sklearn.inspection import permutation_importance
+    df = _to_df(data)
+    X = df.drop(columns=[df.columns[-1]]).apply(pd.to_numeric, errors="coerce").to_numpy()
+    y = df.iloc[:, -1].astype(str).to_numpy()
+    m = RandomForestClassifier(n_estimators=120, random_state=0, n_jobs=-1)
+    m.fit(X, y)
+    perm = permutation_importance(m, X, y, n_repeats=10, random_state=0, scoring="accuracy", n_jobs=-1)
+    imp = perm.importances_mean
+    order = np.argsort(-imp)
+    lines = ["各特征重要度（随机森林 + 排列重要性）："]
+    for i in order:
+        lines.append(f"  特征{i + 1}: {imp[i]:.4f}")
+    return {"text": "\n".join(lines)}
+
+
+@_reg
+@_tool({
+    "properties": {
+        "data": {"description": "数据：CSV 文本或 {列名:[值]} 字典，最后一列是类别标签"},
+    },
+    "required": ["data"],
+}, category="机器学习")
+def ml_model_compare(data):
+    """模型对比：在同一训练/测试切分上比较决策树/随机森林/SVM/kNN/逻辑回归/GBDT 的精度。
+
+    最后一列为标签；输出各模型准确率及二分类 AUC，给出最佳模型。"""
+    from sklearn.model_selection import train_test_split
+    from sklearn.metrics import roc_auc_score
+    from sklearn.tree import DecisionTreeClassifier
+    from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
+    from sklearn.svm import SVC
+    from sklearn.neighbors import KNeighborsClassifier
+    from sklearn.linear_model import LogisticRegression
+    df = _to_df(data)
+    X = df.drop(columns=[df.columns[-1]]).apply(pd.to_numeric, errors="coerce").to_numpy()
+    y = df.iloc[:, -1].astype(str).to_numpy()
+    Xtr, Xte, ytr, yte = train_test_split(X, y, test_size=0.25, random_state=0)
+    classes = sorted(set(y))
+    builders = [("决策树", lambda: DecisionTreeClassifier(random_state=0)),
+                ("随机森林", lambda: RandomForestClassifier(n_estimators=100, random_state=0, n_jobs=-1)),
+                ("SVM", lambda: SVC(kernel="rbf", probability=True, random_state=0)),
+                ("kNN", lambda: KNeighborsClassifier(n_neighbors=3)),
+                ("逻辑回归", lambda: LogisticRegression(max_iter=500)),
+                ("GBDT", lambda: GradientBoostingClassifier(random_state=0))]
+    res = []
+    for name, build in builders:
+        try:
+            m = build(); m.fit(Xtr, ytr)
+            acc = float(m.score(Xte, yte))
+            auc = float("nan")
+            if len(classes) == 2 and hasattr(m, "predict_proba"):
+                pos = classes[1]
+                proba = m.predict_proba(Xte)
+                auc = float(roc_auc_score((yte == pos), proba[:, list(classes).index(pos)]))
+            res.append((name, acc, auc))
+        except Exception:
+            pass
+    lines = ["模型对比："]
+    best = None
+    for name, acc, auc in res:
+        lines.append(f"  {name}: acc={acc:.1%}" + (f", AUC={auc:.3f}" if not np.isnan(auc) else ""))
+        if best is None or acc > best[1]:
+            best = (name, acc)
+    if best:
+        lines.append(f"最佳: {best[0]} (acc={best[1]:.1%})")
+    return {"text": "\n".join(lines)}
+
+
+@_reg
+@_tool({
+    "properties": {
+        "data": {"description": "数据：CSV 文本或 {列名:[值]} 字典，最后一列是类别标签"},
+        "folds": {"type": "integer", "description": "交叉验证折数，默认 5"},
+    },
+    "required": ["data"],
+}, category="机器学习")
+def ml_cv_compare(data, folds=5):
+    """交叉验证对比：对多个模型做 K 折交叉验证，比较平均精度与波动。
+
+    最后一列为标签；输出各模型 acc=均值±标准差，便于判断稳定性。"""
+    from sklearn.model_selection import cross_val_score, StratifiedKFold
+    from sklearn.tree import DecisionTreeClassifier
+    from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
+    from sklearn.svm import SVC
+    from sklearn.neighbors import KNeighborsClassifier
+    from sklearn.linear_model import LogisticRegression
+    df = _to_df(data)
+    X = df.drop(columns=[df.columns[-1]]).apply(pd.to_numeric, errors="coerce").to_numpy()
+    y = df.iloc[:, -1].astype(str).to_numpy()
+    fold = int(folds or 112)
+    fold = max(2, min(fold, max(2, X.shape[0] // 2)))
+    builders = [("决策树", lambda: DecisionTreeClassifier(random_state=0)),
+                ("随机森林", lambda: RandomForestClassifier(n_estimators=100, random_state=0, n_jobs=-1)),
+                ("SVM", lambda: SVC(kernel="rbf", probability=True, random_state=0)),
+                ("kNN", lambda: KNeighborsClassifier(n_neighbors=3)),
+                ("逻辑回归", lambda: LogisticRegression(max_iter=500)),
+                ("GBDT", lambda: GradientBoostingClassifier(random_state=0))]
+    lines = [f"{fold} 折交叉验证对比："]
+    for name, build in builders:
+        try:
+            m = build()
+            cv = StratifiedKFold(n_splits=fold, shuffle=True, random_state=0)
+            sc = cross_val_score(m, X, y, cv=cv, scoring="accuracy", n_jobs=-1)
+            lines.append(f"  {name}: acc={sc.mean():.1%} ± {sc.std():.1%}")
+        except Exception:
+            pass
     return {"text": "\n".join(lines)}

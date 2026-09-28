@@ -44,13 +44,18 @@ from modules.numeric_page import NumericPage
 from modules.calculus_page import CalculusPage
 from modules.prob_page import ProbPage
 from modules.settings_page import SettingsPage
+from modules.plugin_store_page import PluginStorePage
 from modules.help_page import HelpPage
 from modules.complex_page import ComplexPage
 from modules.time_series_page import TimeSeriesPage
 from modules.ml_page import MlPage
 from modules.ocr_page import OcrPage
+from modules.survival_page import SurvivalPage
+from modules.bayes_page import BayesPage
+from modules.workbook_page import WorkbookPage
 
 from modules import app_settings as _S
+from modules import i18n
 ctk.set_appearance_mode("dark" if _S.get("theme", "浅色") == "深色" else "light")
 ctk.set_default_color_theme("blue")       # 主题色
 
@@ -58,10 +63,60 @@ APP_TITLE = "MatLite 数学工作台"
 APP_VERSION = _S.APP_VERSION  # 版本号唯一来源：modules/app_settings.py
 
 
+# 页面类 -> (emoji, i18n key)。导航文本与页面构建复用，便于语言切换时重建。
+PAGE_META = {
+    CalculatorPage: ("🧮", "page.calc"),
+    MatrixPage: ("🔢", "page.matrix"),
+    NumericPage: ("🔬", "page.numeric"),
+    CalculusPage: ("∫", "page.calculus"),
+    ComplexPage: ("🔮", "page.complex"),
+    ProbPage: ("🎲", "page.prob"),
+    PlotPage: ("📈", "page.plot"),
+    DataPage: ("📊", "page.data"),
+    TimeSeriesPage: ("⏳", "page.timeseries"),
+    MlPage: ("🧠", "page.ml"),
+    SurvivalPage: ("🧬", "page.survival"),
+    BayesPage: ("☮️", "page.bayes"),
+    AiPage: ("🤖", "page.ai"),
+    OcrPage: ("🎯", "page.ocr"),
+    HistoryPage: ("🗂", "page.history"),
+    WorkbookPage: ("📒", "page.workbook"),
+    SettingsPage: ("⚙️", "page.settings"),
+    PluginStorePage: ("🧩", "page.plugins"),
+    HelpPage: ("📖", "page.help"),
+}
+
+
+def _page_label(cls):
+    emoji, key = PAGE_META.get(cls, ("", ""))
+    if emoji:
+        return f"{emoji}  {i18n.tr(key)}"
+    # 插件页：不在内置 PAGE_META，从插件注册表取 (emoji, 名)
+    try:
+        from modules import plugin_manager as _pm
+        meta = _pm.plugin_pages().get(cls)
+        if meta:
+            _emoji, _name = meta
+            return f"{_emoji}  {_name}"
+    except Exception:
+        pass
+    return getattr(cls, "__name__", "?")
+
+
 class MainApp(ctk.CTk):
     def __init__(self, manager=None):
         super().__init__()
+        from modules import ui_kit   # v2.0 设计系统
+        ui_kit.apply_runtime()       # 让「界面字体缩放」真正生效
+        self._ui = ui_kit
+        self._accent = ui_kit.accent_color()
         self.mgr = manager or AccountManager()
+        # 加载已启用的本地插件（注册其 AI 工具）
+        try:
+            from modules import plugin_manager as _pm
+            _pm.load_enabled()
+        except Exception:
+            pass
         self.current_user = self.mgr.current_user
         self.title(APP_TITLE)
         self.geometry("1320x820")
@@ -100,23 +155,8 @@ class MainApp(ctk.CTk):
         ctk.CTkButton(self.sidebar, text="📮 意见反馈", height=36, fg_color="gray35",
                       command=self._open_feedback).grid(row=2, column=0, padx=12, pady=(0, 8), sticky="ew")
 
-        nav = [
-            ("🧮  公式计算", CalculatorPage),
-            ("🔢  矩阵与线性代数", MatrixPage),
-            ("🔬  方程与数值计算", NumericPage),
-            ("∫  微积分深化", CalculusPage),
-            ("🔮  复变函数", ComplexPage),
-            ("🎲  概率与分布", ProbPage),
-            ("📈  绘图可视化", PlotPage),
-            ("📊  数据分析", DataPage),
-            ("⏳  时间序列", TimeSeriesPage),
-            ("🧠  机器学习", MlPage),
-            ("🤖  AI 助手", AiPage),
-            ("🎯  拍照识题", OcrPage),
-            ("🗂  历史记录", HistoryPage),
-            ("⚙️  设置", SettingsPage),
-            ("📖  帮助中心", HelpPage),
-        ]
+        # 页面/导航顺序与文案由 PAGE_META + 插件注册表统一决定（便于语言切换后重建）
+        self._nav_spec = self._resolve_nav()
 
         # 右侧内容容器
         self.container = ctk.CTkFrame(self, corner_radius=0, fg_color="transparent")
@@ -126,31 +166,21 @@ class MainApp(ctk.CTk):
 
         self.pages = {}
         self.nav_buttons = []
+        self._current_cls = CalculatorPage
         # 历史记录存储（游客模式自动不记录）
         self.history = HistoryStore(self.mgr)
-        # 导航区（可滚动：页面较多时嵌套滚动，避免与底部署名冲突）
+        # 导航区（可滚动：页面较多时嵌套滚动）。底部位居第 4 行、grid 分层，不与导航重叠，
+        # 无需预留巨大底部空隙（此前 140px 会在导航与署名词之间留下难看的大间隔）
         self.nav_frame = ctk.CTkScrollableFrame(self.sidebar, width=205, fg_color="transparent")
-        self.nav_frame.grid(row=3, column=0, sticky="nsew", padx=2, pady=(6, 8))
+        self.nav_frame.grid(row=3, column=0, sticky="nsew", padx=2, pady=(6, 4))
         self.nav_frame.grid_columnconfigure(0, weight=1)
         self.sidebar.grid_rowconfigure(3, weight=1)
-        for i, (text, cls) in enumerate(nav, start=0):
-            btn = ctk.CTkButton(
-                self.nav_frame, text=text, anchor="w", height=40,
-                font=ctk.CTkFont(size=13),
-                command=lambda c=cls: self.show_page(c),
-            )
-            btn.grid(row=i, column=0, padx=4, pady=3, sticky="ew")
-            self.nav_buttons.append(btn)
-            # 页面构建
-            page = cls(self.container)
-            page.app = self          # 让各页面能互相访问（AI 解读分析结果用）
-            page.account = self.mgr  # 账号对象
-            page.history = self.history
-            self.pages[cls] = page
+        self._build_nav_buttons()
+        self._build_pages()
 
         foot = ctk.CTkLabel(
             self.sidebar, text="本地计算 · 数据不上传\nMade by zoilzo & Claude",
-            font=ctk.CTkFont(size=10), text_color="gray",
+            font=ctk.CTkFont(size=10),
         )
         foot.grid(row=4, column=0, padx=12, pady=12)
 
@@ -183,16 +213,89 @@ class MainApp(ctk.CTk):
         FeedbackDialog(self, history=self.history)
 
     def show_page(self, cls):
+        if cls not in self.pages:  # 插件页若构建失败，不应让导航点击崩溃
+            cls = CalculatorPage
         for page in self.pages.values():
             page.grid_remove()
         page = self.pages[cls]
         page.grid(row=0, column=0, sticky="nsew")
+        self._current_cls = cls
+        # v2.0：高亮当前选中的导航项
+        acc = getattr(self, "_accent", None) or "#3b82f6"
+        for b in self.nav_buttons:
+            tgt = getattr(b, "_page_cls", None)
+            if tgt is cls:
+                b.configure(fg_color=acc)
+            else:
+                b.configure(fg_color=getattr(b, "_inactive_fg", None) or b.cget("fg_color"))
         # 页面每次被切换时刷新一下数据（有的模块需要重新读取变量列表）
         if hasattr(page, "on_show"):
             page.on_show()
         # 记录页面切换日志
         if hasattr(self, "history"):
             self.history.log_op(cls.__name__, "切换到该页面")
+
+    def _resolve_nav(self):
+        """有序导航项列表：内置页 + 已启用插件页。每项 (cls, emoji, label)。"""
+        items = []
+        for cls, (emoji, key) in PAGE_META.items():
+            items.append((cls, emoji, i18n.tr(key)))
+        try:
+            from modules import plugin_manager as _pm
+            for cls, (emoji, name) in _pm.plugin_pages().items():
+                items.append((cls, emoji, name))
+        except Exception:
+            pass
+        return items
+
+    def _build_nav_buttons(self):
+        """在 nav_frame 里按本页导航规格重建导航按钮（调用前需先清空 nav_frame）。"""
+        self.nav_buttons = []
+        for i, (cls, _emoji, _label) in enumerate(self._nav_spec, start=0):
+            btn = ctk.CTkButton(
+                self.nav_frame, text=_page_label(cls), anchor="w", height=40,
+                font=ctk.CTkFont(size=10),
+                command=lambda c=cls: self.show_page(c),
+            )
+            btn.grid(row=i, column=0, padx=4, pady=3, sticky="ew")
+            btn._page_cls = cls
+            btn._inactive_fg = btn.cget("fg_color")
+            self.nav_buttons.append(btn)
+
+    def _build_pages(self):
+        """从上一步 nav 规格构建全部页面实例进 self.pages。"""
+        old = list(self.pages.values())
+        new_pages = {}
+        for cls, _emoji, _label in self._nav_spec:
+            try:
+                page = cls(self.container)
+            except Exception:
+                page = None
+            if page is not None:
+                page.app = self
+                page.account = self.mgr
+                page.history = self.history
+                new_pages[cls] = page
+        self.pages = new_pages
+        for o in old:
+            try:
+                o.destroy()
+            except Exception:
+                pass
+
+    def refresh_navigation(self):
+        """按当前设置与插件状态重建导航与全部页面（语言切换/插件启停后调用）。"""
+        cur = getattr(self, "_current_cls", CalculatorPage)
+        self._nav_spec = self._resolve_nav()
+        for w in self.nav_frame.winfo_children():
+            w.destroy()
+        self._build_nav_buttons()
+        self._build_pages()
+        self.show_page(cur if cur in self.pages else CalculatorPage)
+
+    def apply_locale(self):
+        """界面语言切换后重建全部页面与导航文本，即时生效（无需重启）。"""
+        self.refresh_navigation()
 
     def _switch_account(self):
         """退出当前账号，回到登录窗口。"""

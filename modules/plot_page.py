@@ -17,7 +17,9 @@ import customtkinter as ctk
 from scipy import stats as _st
 
 from modules.expr_utils import SAFE, evalf, evalf_subs, eval2, eval2_subs, nums
+from modules import ui_kit as ui
 from modules import plot_style as ps
+from modules.i18n import tr
 
 plt.rcParams["font.sans-serif"] = ["Microsoft YaHei", "SimHei", "DejaVu Sans"]
 plt.rcParams["axes.unicode_minus"] = False
@@ -48,18 +50,17 @@ DIST = {
 }
 
 
-class PlotPage(ctk.CTkFrame):
+class PlotPage(ui.BasePage):
     def __init__(self, master):
-        super().__init__(master, fg_color="transparent")
+        super().__init__(master)
         self.grid_columnconfigure(1, weight=1)
         self.grid_rowconfigure(0, weight=1)
 
         # ================= 左：参数面板 =================
-        left = ctk.CTkScrollableFrame(self, width=380, corner_radius=12, label_text="绘图设置")
-        left.grid(row=0, column=0, sticky="nsew", padx=12, pady=12)
+        left = self.left
         left.grid_columnconfigure(0, weight=1)
 
-        ctk.CTkLabel(left, text="绘图类型", font=ctk.CTkFont(size=14, weight="bold")).grid(
+        ctk.CTkLabel(left, text=tr("绘图类型"), font=ctk.CTkFont(size=14, weight="bold")).grid(
             row=0, column=0, sticky="w", padx=14, pady=(10, 2))
         self.type = ctk.CTkOptionMenu(left, values=TYPES, command=lambda _v: self._switch())
         self.type.grid(row=1, column=0, sticky="ew", padx=12, pady=(0, 8))
@@ -71,31 +72,31 @@ class PlotPage(ctk.CTkFrame):
         self.dyn_rows = []
 
         # 标题 / 轴标签
-        ctk.CTkLabel(left, text="标题（可空）", font=ctk.CTkFont(size=12)).grid(
+        ctk.CTkLabel(left, text=tr("标题（可空）"), font=ctk.CTkFont(size=12)).grid(
             row=3, column=0, sticky="w", padx=14, pady=(6, 0))
-        self.title = ctk.CTkEntry(left, height=32, placeholder_text="图表标题")
+        self.title = ctk.CTkEntry(left, height=32, placeholder_text=tr("图表标题"))
         self.title.grid(row=4, column=0, sticky="ew", padx=12, pady=(2, 6))
 
-        ctk.CTkLabel(left, text="X 轴标签（默认 X）", font=ctk.CTkFont(size=12)).grid(
+        ctk.CTkLabel(left, text=tr("X 轴标签（默认 X）"), font=ctk.CTkFont(size=12)).grid(
             row=5, column=0, sticky="w", padx=14, pady=(6, 0))
         self.xlab = ctk.CTkEntry(left, height=32)
         self.xlab.grid(row=6, column=0, sticky="ew", padx=12, pady=(2, 6))
 
-        ctk.CTkLabel(left, text="Y 轴标签（默认 Y）", font=ctk.CTkFont(size=12)).grid(
+        ctk.CTkLabel(left, text=tr("Y 轴标签（默认 Y）"), font=ctk.CTkFont(size=12)).grid(
             row=7, column=0, sticky="w", padx=14, pady=(6, 0))
         self.ylab = ctk.CTkEntry(left, height=32)
         self.ylab.grid(row=8, column=0, sticky="ew", padx=12, pady=(2, 6))
 
-        self.grid_chk = ctk.CTkCheckBox(left, text="显示网格")
+        self.grid_chk = ctk.CTkCheckBox(left, text=tr("显示网格"))
         self.grid_chk.grid(row=9, column=0, sticky="w", padx=14, pady=(8, 4))
         self.grid_chk.select()
 
-        ctk.CTkButton(left, text="📈 画 图", height=42, command=self._plot).grid(
+        ctk.CTkButton(left, text=tr("📈 画 图"), height=42, command=self._plot).grid(
             row=10, column=0, sticky="ew", padx=12, pady=(8, 6))
-        ctk.CTkButton(left, text="💾 保存 / 导出（PNG SVG PDF EMF）", height=36, fg_color="gray40",
+        ctk.CTkButton(left, text=tr("💾 保存 / 导出（PNG SVG PDF EMF）"), height=36, fg_color="gray40",
                       command=self._save).grid(
             row=11, column=0, sticky="ew", padx=12, pady=(0, 4))
-        ctk.CTkLabel(left, text="导出时可选矢量格式 SVG/PDF/EMF（Word 可直接插入）",
+        ctk.CTkLabel(left, text=tr("导出时可选矢量格式 SVG/PDF/EMF（Word 可直接插入）"),
                      font=ctk.CTkFont(size=11), text_color="gray45").grid(
             row=12, column=0, sticky="w", padx=14, pady=(0, 12))
 
@@ -106,28 +107,15 @@ class PlotPage(ctk.CTkFrame):
 
         # ================= 右：画布 =================
         # 画布与工具栏放入独立 box，box 用 grid 挂到右侧，box 内只用 pack。
-        right = ctk.CTkFrame(self, corner_radius=12)
-        right.grid(row=0, column=1, sticky="nsew", padx=(0, 12), pady=12)
+        right = self.right
         right.grid_columnconfigure(0, weight=1)
         right.grid_rowconfigure(0, weight=1)
-
-        box = ctk.CTkFrame(right, fg_color="transparent")
-        box.grid(row=0, column=0, sticky="nsew")
-        box.grid_rowconfigure(0, weight=1)
-        box.grid_columnconfigure(0, weight=1)
-
-        self.figure = plt.Figure(figsize=(7, 4.6), dpi=100)
-        self.ax = self.figure.add_subplot(111)
-        self.canvas = FigureCanvasTkAgg(self.figure, master=box)
-        self.canvas.get_tk_widget().pack(side="top", fill="both", expand=True)
-        toolbar = NavigationToolbar2Tk(self.canvas, box)
-        toolbar.update()
-        toolbar.pack(side="bottom", fill="x")
+        box, self.figure, self.canvas, _tb = self.show_plot()
+        self.ax = self.figure.gca()
 
         self.ax.set_title("图形预览")
         self.ax.set_xlabel("X")
         self.ax.set_ylabel("Y")
-        self.canvas.draw()
 
         # 初始化默认类型（y=f(x)）
         self.type.set(TYPES[0])

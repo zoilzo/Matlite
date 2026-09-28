@@ -8,6 +8,8 @@ import customtkinter as ctk
 from tkinter import messagebox
 
 from modules.latex_view import render_latex_text, matrix_to_image
+from modules import ui_kit as ui
+from modules.i18n import tr
 
 KINDS = [
     ("计算历史", "calc.jsonl"),
@@ -40,9 +42,9 @@ def _one_line(rec):
     return f"{rec.get('time','')}  [{rec.get('page','')}] {str(rec.get('action',''))[:30]} {str(rec.get('detail',''))[:30]}"
 
 
-class HistoryPage(ctk.CTkFrame):
+class HistoryPage(ui.BasePage):
     def __init__(self, master):
-        super().__init__(master, fg_color="transparent")
+        super().__init__(master, layout=False)
         self.grid_columnconfigure(1, weight=1)
         self.grid_rowconfigure(0, weight=1)
         self._kind = KINDS[0][1]
@@ -54,27 +56,27 @@ class HistoryPage(ctk.CTkFrame):
         left.grid_propagate(False)
         left.grid_columnconfigure(0, weight=1)
 
-        ctk.CTkLabel(left, text="历史记录类型", font=ctk.CTkFont(size=14, weight="bold")).grid(
+        ctk.CTkLabel(left, text=tr("历史记录类型"), font=ctk.CTkFont(size=14, weight="bold")).grid(
             row=0, column=0, sticky="w", padx=14, pady=(14, 6))
         seg = ctk.CTkSegmentedButton(left, values=[k[0] for k in KINDS],
                                      command=lambda v: self._switch(v))
         seg.grid(row=1, column=0, sticky="ew", padx=12)
         seg.set(KINDS[0][0])
 
-        ctk.CTkLabel(left, text="关键词搜索（可留空）", font=ctk.CTkFont(size=12)).grid(
+        ctk.CTkLabel(left, text=tr("关键词搜索（可留空）"), font=ctk.CTkFont(size=12)).grid(
             row=2, column=0, sticky="w", padx=14, pady=(12, 2))
-        self.search = ctk.CTkEntry(left, height=34, placeholder_text="如：sin 或 回归")
+        self.search = ctk.CTkEntry(left, height=34, placeholder_text=tr("如：sin 或 回归"))
         self.search.grid(row=3, column=0, sticky="ew", padx=12)
         self.search.bind("<Return>", lambda _e: self._refresh())
 
         btns = ctk.CTkFrame(left, fg_color="transparent")
         btns.grid(row=4, column=0, sticky="ew", padx=12, pady=10)
         btns.grid_columnconfigure((0, 1), weight=1)
-        ctk.CTkButton(btns, text="刷新", height=34, command=self._refresh).grid(
+        ctk.CTkButton(btns, text=tr("刷新"), height=34, command=self._refresh).grid(
             row=0, column=0, sticky="ew", padx=(0, 4))
-        ctk.CTkButton(btns, text="导出", height=34, fg_color="gray40",
+        ctk.CTkButton(btns, text=tr("导出"), height=34, fg_color="gray40",
                       command=self._export).grid(row=0, column=1, sticky="ew", padx=(4, 0))
-        ctk.CTkButton(left, text="🗑 清空当前类型", height=34, fg_color="#8a3b3b",
+        ctk.CTkButton(left, text=tr("🗑 清空当前类型"), height=34, fg_color="#8a3b3b",
                       command=self._clear).grid(row=5, column=0, sticky="ew", padx=12)
 
         tip = ("说明：\n· 登录用户的历史自动保存；\n· 游客模式不记录；\n"
@@ -93,7 +95,7 @@ class HistoryPage(ctk.CTkFrame):
         head = ctk.CTkFrame(right, fg_color="transparent")
         head.grid(row=0, column=0, sticky="ew", padx=14, pady=(10, 4))
         head.grid_columnconfigure(0, weight=1)
-        ctk.CTkLabel(head, text="🗂 历史记录", font=ctk.CTkFont(size=16, weight="bold")).grid(
+        ctk.CTkLabel(head, text=tr("🗂 历史记录"), font=ctk.CTkFont(size=16, weight="bold")).grid(
             row=0, column=0, sticky="w")
         self.count_lab = ctk.CTkLabel(head, text="", font=ctk.CTkFont(size=12), text_color="gray50")
         self.count_lab.grid(row=0, column=1, sticky="e")
@@ -102,7 +104,7 @@ class HistoryPage(ctk.CTkFrame):
         self.list_frame.grid(row=1, column=0, sticky="nsew", padx=10, pady=(0, 4))
         self.list_frame.grid_columnconfigure(0, weight=1)
 
-        ctk.CTkLabel(right, text="详情", font=ctk.CTkFont(size=13, weight="bold")).grid(
+        ctk.CTkLabel(right, text=tr("详情"), font=ctk.CTkFont(size=13, weight="bold")).grid(
             row=2, column=0, sticky="w", padx=14, pady=(6, 2))
         self.detail = ctk.CTkTextbox(right, font=ctk.CTkFont(family="Consolas", size=12), height=130)
         self.detail.grid(row=3, column=0, sticky="nsew", padx=14, pady=(0, 4))
@@ -137,7 +139,7 @@ class HistoryPage(ctk.CTkFrame):
         if store is None or not store.enabled:
             self.count_lab.configure(text="0 条")
             self._clear_list()
-            ctk.CTkLabel(self.list_frame, text="游客模式不记录历史。\n注册/登录后，这里会自动显示你的历史记录。",
+            ctk.CTkLabel(self.list_frame, text=tr("游客模式不记录历史。\n注册/登录后，这里会自动显示你的历史记录。"),
                          font=ctk.CTkFont(size=13), text_color="gray50").grid(row=0, column=0, pady=30)
             return
         recs = getattr(store, _FETCH[self._file()])()
@@ -148,7 +150,7 @@ class HistoryPage(ctk.CTkFrame):
         self.count_lab.configure(text=f"共 {len(recs)} 条")
         self._clear_list()
         if not recs:
-            ctk.CTkLabel(self.list_frame, text="（暂无记录）", font=ctk.CTkFont(size=13),
+            ctk.CTkLabel(self.list_frame, text=tr("（暂无记录）"), font=ctk.CTkFont(size=13),
                          text_color="gray50").grid(row=0, column=0, pady=30)
             return
         for i, rec in enumerate(recs):

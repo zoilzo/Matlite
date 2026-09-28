@@ -11,6 +11,8 @@ from sympy import (symbols, sympify, simplify, series, lambdify, latex,
                    Function, dsolve, Eq, Derivative, nan)
 
 from modules.expr_utils import SAFE, evalf, nums
+from modules import ui_kit as ui
+from modules.i18n import tr
 
 plt.rcParams["font.sans-serif"] = ["Microsoft YaHei", "SimHei", "DejaVu Sans"]
 plt.rcParams["axes.unicode_minus"] = False
@@ -23,19 +25,18 @@ def _expr(s):
     return sympify(s.strip().replace("^", "**"))
 
 
-class CalculusPage(ctk.CTkFrame):
+class CalculusPage(ui.BasePage):
     def __init__(self, master):
-        super().__init__(master, fg_color="transparent")
+        super().__init__(master)
         self.grid_columnconfigure(1, weight=1)
         self.grid_rowconfigure(0, weight=1)
         self._out_text = ""
 
         # ================= 左：参数 =================
-        left = ctk.CTkScrollableFrame(self, width=420, corner_radius=12, label_text="参数设置")
-        left.grid(row=0, column=0, sticky="nsew", padx=12, pady=12)
+        left = self.left
         left.grid_columnconfigure(0, weight=1)
 
-        ctk.CTkLabel(left, text="功能", font=ctk.CTkFont(size=14, weight="bold")).grid(
+        ctk.CTkLabel(left, text=tr("功能"), font=ctk.CTkFont(size=14, weight="bold")).grid(
             row=0, column=0, sticky="w", padx=14, pady=(10, 6))
         self.mode = ctk.CTkSegmentedButton(left, values=MODES, command=lambda _v: self._switch())
         self.mode.grid(row=1, column=0, sticky="ew", padx=12)
@@ -47,7 +48,7 @@ class CalculusPage(ctk.CTkFrame):
         self.dyn_rows = []
         self._switch()
 
-        ctk.CTkButton(left, text="⚡ 计 算", height=42, command=self._run).grid(
+        ctk.CTkButton(left, text=tr("⚡ 计 算"), height=42, command=self._run).grid(
             row=3, column=0, sticky="ew", padx=12, pady=(8, 6))
 
         tip = ("用法：\n· 泰勒展开：在 a 点把 f(x) 近似成多项式；\n"
@@ -59,13 +60,12 @@ class CalculusPage(ctk.CTkFrame):
             row=4, column=0, sticky="w", padx=14, pady=(6, 12))
 
         # ================= 右：结果 + 图形 =================
-        right = ctk.CTkFrame(self, corner_radius=12)
-        right.grid(row=0, column=1, sticky="nsew", padx=(0, 12), pady=12)
+        right = self.right
         right.grid_columnconfigure(0, weight=1)
         right.grid_rowconfigure(1, weight=1)
         right.grid_rowconfigure(2, weight=2)
 
-        ctk.CTkLabel(right, text="计算结果", font=ctk.CTkFont(size=14, weight="bold")).grid(
+        ctk.CTkLabel(right, text=tr("计算结果"), font=ctk.CTkFont(size=14, weight="bold")).grid(
             row=0, column=0, sticky="w", padx=16, pady=(12, 4))
         self.out = ctk.CTkTextbox(right, font=ctk.CTkFont(family="Consolas", size=13))
         self.out.grid(row=1, column=0, sticky="nsew", padx=16, pady=(0, 4))

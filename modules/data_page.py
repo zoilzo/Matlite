@@ -19,6 +19,8 @@ import matplotlib
 matplotlib.use("TkAgg")
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from modules import ui_kit as ui
+from modules.i18n import tr
 
 plt.rcParams["font.sans-serif"] = ["Microsoft YaHei", "SimHei", "DejaVu Sans"]
 plt.rcParams["axes.unicode_minus"] = False
@@ -30,10 +32,11 @@ from stats_utils import (
     mannwhitney_u_test, wilcoxon_signed_rank, kruskal_wallis_test,
     friedman_test, posthoc_test, one_sample_t_test, proportion_test,
     mcnemar_test, logistic_regression, multiple_linear_regression,
-    cronbach_alpha,
+    cronbach_alpha, partial_correlation, add_correlation_ci,
 )
 import stats_plots as sp
 from stats_report import build_word_report
+import stats_latex as srpltx
 
 
 ANALYSIS_TYPES = ["描述统计", "正态性检验", "t 检验", "回归分析",
@@ -41,15 +44,15 @@ ANALYSIS_TYPES = ["描述统计", "正态性检验", "t 检验", "回归分析",
                   "Mann-Whitney U", "Wilcoxon 符号秩", "Kruskal-Wallis",
                   "Friedman 检验", "事后多重比较", "单样本 t 检验",
                   "比例检验", "McNemar 检验", "逻辑回归", "多元线性回归",
-                  "信度分析 (Cronbach's α)"]
+                  "信度分析 (Cronbach's α)", "偏相关分析"]
 PLOT_TYPES = ["散点图（含拟合线）", "直方图（含正态曲线）", "正态 Q-Q 图", "分组箱线图",
               "小提琴图（分组分布）", "误差棒图（均值±SE）", "相关矩阵热图", "回归森林图"]
 ALPHA_CHOICES = ["0.05", "0.01", "0.10"]
 
 
-class DataPage(ctk.CTkFrame):
+class DataPage(ui.BasePage):
     def __init__(self, master):
-        super().__init__(master, fg_color="transparent")
+        super().__init__(master)
         self.grid_columnconfigure(0, weight=0)
         self.grid_columnconfigure(1, weight=1)
         self.grid_rowconfigure(0, weight=1)
@@ -66,13 +69,14 @@ class DataPage(ctk.CTkFrame):
         self.chi2 = None
         self.anova = None
         self.corr = None
+        self.partial = None
         self.paired = None
         self.figures = []           # [(fig, caption), ...]
         self._col_vars = {}
-        self._canvas = None
+        self._mp_canvas = None       # 绘图画布（不用 self._canvas，避免覆盖 CTkFrame 内部画布）
 
         # ================= 左：控制面板 =================
-        left = ctk.CTkScrollableFrame(self, width=360, corner_radius=12, label_text="数据分析")
+        left = self.left
         left.grid(row=0, column=0, sticky="nsew", padx=12, pady=12)
         left.grid_columnconfigure(0, weight=1)
 
@@ -80,20 +84,20 @@ class DataPage(ctk.CTkFrame):
         imp_row = ctk.CTkFrame(left, fg_color="transparent")
         imp_row.grid(row=0, column=0, sticky="ew", padx=12, pady=(8, 4))
         imp_row.grid_columnconfigure(0, weight=1)
-        ctk.CTkButton(imp_row, text="📂 导入数据", height=38, command=self._load).grid(
+        ctk.CTkButton(imp_row, text=tr("📂 导入数据"), height=38, command=self._load).grid(
             row=0, column=0, sticky="ew", padx=(0, 4))
-        self.last_btn = ctk.CTkButton(imp_row, text="↩ 上次文件", height=38, width=110,
+        self.last_btn = ctk.CTkButton(imp_row, text=tr("↩ 上次文件"), height=38, width=110,
                                       fg_color="gray40", command=self._load_last)
         self.last_btn.grid(row=0, column=1, sticky="ew", padx=(4, 0))
         self.last_btn.configure(state="disabled")
-        self.file_label = ctk.CTkLabel(left, text="尚未导入数据", font=ctk.CTkFont(size=12),
+        self.file_label = ctk.CTkLabel(left, text=tr("尚未导入数据"), font=ctk.CTkFont(size=12),
                                        text_color="steelblue", wraplength=300, justify="left")
         self.file_label.grid(row=1, column=0, sticky="w", padx=14, pady=(2, 2))
         self.info_label = ctk.CTkLabel(left, text="", font=ctk.CTkFont(size=12), text_color="gray50")
         self.info_label.grid(row=2, column=0, sticky="w", padx=14, pady=(2, 6))
 
         # 分析类型（下拉选择，避免 8 个选项塞不下文字）
-        ctk.CTkLabel(left, text="选择分析", font=ctk.CTkFont(size=14, weight="bold")).grid(
+        ctk.CTkLabel(left, text=tr("选择分析"), font=ctk.CTkFont(size=14, weight="bold")).grid(
             row=3, column=0, sticky="w", padx=14, pady=(6, 4))
         self.type = ctk.CTkOptionMenu(left, values=ANALYSIS_TYPES,
                                       command=lambda _v: self._switch_type(),
@@ -111,17 +115,17 @@ class DataPage(ctk.CTkFrame):
         alpha_row = ctk.CTkFrame(left, fg_color="transparent")
         alpha_row.grid(row=6, column=0, sticky="ew", padx=12, pady=(8, 4))
         alpha_row.grid_columnconfigure(1, weight=1)
-        ctk.CTkLabel(alpha_row, text="显著性水平 α", font=ctk.CTkFont(size=12)).grid(
+        ctk.CTkLabel(alpha_row, text=tr("显著性水平 α"), font=ctk.CTkFont(size=12)).grid(
             row=0, column=0, sticky="w", padx=(0, 8))
         self.alpha_dd = ctk.CTkOptionMenu(alpha_row, values=ALPHA_CHOICES, width=80)
         self.alpha_dd.grid(row=0, column=1, sticky="w")
         self.alpha_dd.set("0.05")
 
-        ctk.CTkButton(left, text="▶ 运行分析", height=40, command=self._run).grid(
+        ctk.CTkButton(left, text=tr("▶ 运行分析"), height=40, command=self._run).grid(
             row=7, column=0, sticky="ew", padx=12, pady=(4, 6))
 
         # 绘图区
-        ctk.CTkLabel(left, text="绘制图形", font=ctk.CTkFont(size=14, weight="bold")).grid(
+        ctk.CTkLabel(left, text=tr("绘制图形"), font=ctk.CTkFont(size=14, weight="bold")).grid(
             row=8, column=0, sticky="w", padx=14, pady=(10, 4))
         self.plot_type_dd = ctk.CTkOptionMenu(left, values=PLOT_TYPES, command=lambda _v: self._build_plot_dyn())
         self.plot_type_dd.grid(row=9, column=0, sticky="ew", padx=12, pady=(0, 6))
@@ -132,16 +136,18 @@ class DataPage(ctk.CTkFrame):
         self.plot_widgets = []
         self._build_plot_dyn()
 
-        ctk.CTkButton(left, text="📈 生成图形", height=36, fg_color="gray40", command=self._plot).grid(
+        ctk.CTkButton(left, text=tr("📈 生成图形"), height=36, fg_color="gray40", command=self._plot).grid(
             row=11, column=0, sticky="ew", padx=12, pady=(4, 4))
 
         # 导出报告
-        ctk.CTkButton(left, text="📄 导出报告（Word / PDF）", height=40, fg_color="#2a7f5c",
+        ctk.CTkButton(left, text=tr("📄 导出报告（Word / PDF）"), height=40, fg_color="#2a7f5c",
                       command=self._export).grid(row=12, column=0, sticky="ew", padx=12, pady=(10, 4))
+        ctk.CTkButton(left, text=tr("📕 LaTeX 报告（.tex / PDF）"), height=40, fg_color="#5b4b8a",
+                      command=self._export_latex).grid(row=13, column=0, sticky="ew", padx=12, pady=(10, 440))
 
         # AI 解读
-        ctk.CTkButton(left, text="🤖 AI 解读结果", height=40, fg_color="#5b4b8a",
-                      command=self._ai_interpret).grid(row=13, column=0, sticky="ew", padx=12, pady=(4, 4))
+        ctk.CTkButton(left, text=tr("🤖 AI 解读结果"), height=40, fg_color="#5b4b8a",
+                      command=self._ai_interpret).grid(row=14, column=0, sticky="ew", padx=12, pady=(4, 4))
 
         tip = ("使用步骤：\n"
                "① 点击「导入数据」选择 Excel 或 CSV；\n"
@@ -152,10 +158,10 @@ class DataPage(ctk.CTkFrame):
                "⑥ 最后「导出 Word 报告」一键成文。")
         ctk.CTkLabel(left, text=tip, justify="left", font=ctk.CTkFont(size=11),
                      text_color="gray45", anchor="w", wraplength=300).grid(
-            row=14, column=0, sticky="w", padx=12, pady=(6, 14))
+            row=612, column=0, sticky="w", padx=12, pady=(6, 14))
 
         # ================= 右：表格 + 结果 + 图形 =================
-        right = ctk.CTkFrame(self, corner_radius=12)
+        right = self.right
         right.grid(row=0, column=1, sticky="nsew", padx=(0, 12), pady=12)
         right.grid_columnconfigure(0, weight=1)
         right.grid_rowconfigure(1, weight=2)
@@ -165,9 +171,9 @@ class DataPage(ctk.CTkFrame):
         hd = ctk.CTkFrame(right, fg_color="transparent")
         hd.grid(row=0, column=0, sticky="ew", padx=16, pady=(14, 4))
         hd.grid_columnconfigure(0, weight=1)
-        ctk.CTkLabel(hd, text="分析结果（点击表头可排序）", font=ctk.CTkFont(size=14, weight="bold")).grid(
+        ctk.CTkLabel(hd, text=tr("分析结果（点击表头可排序）"), font=ctk.CTkFont(size=14, weight="bold")).grid(
             row=0, column=0, sticky="w")
-        ctk.CTkButton(hd, text="💾 导出表格 CSV", width=140, height=30, fg_color="gray40",
+        ctk.CTkButton(hd, text=tr("💾 导出表格 CSV"), width=140, height=30, fg_color="gray40",
                       command=self._export_table).grid(row=0, column=1, sticky="e")
 
         # 对齐的表格控件（数据预览 / 表格类结果都放这里）
@@ -187,7 +193,7 @@ class DataPage(ctk.CTkFrame):
         self.out = ctk.CTkTextbox(right, font=ctk.CTkFont(family="Consolas", size=13))
         self.out.grid(row=2, column=0, sticky="nsew", padx=16, pady=(0, 6))
 
-        ctk.CTkLabel(right, text="图形预览", font=ctk.CTkFont(size=14, weight="bold")).grid(
+        ctk.CTkLabel(right, text=tr("图形预览"), font=ctk.CTkFont(size=14, weight="bold")).grid(
             row=3, column=0, sticky="w", padx=16, pady=(6, 4))
         self.plot_frame = ctk.CTkFrame(right, fg_color="white", corner_radius=8)
         self.plot_frame.grid(row=4, column=0, sticky="nsew", padx=16, pady=(0, 16))
@@ -271,6 +277,7 @@ class DataPage(ctk.CTkFrame):
         self.chi2 = None
         self.anova = None
         self.corr = None
+        self.partial = None
         self.paired = None
         self.mw = None
         self.wsr = None
@@ -323,6 +330,7 @@ class DataPage(ctk.CTkFrame):
         self._fill_rows(df)
 
     def _fill_rows(self, df):
+        rows = []
         for row in df.itertuples(index=False):
             vals = []
             for v in row:
@@ -332,7 +340,20 @@ class DataPage(ctk.CTkFrame):
                     vals.append("—")
                 else:
                     vals.append(str(v))
-            self.tv.insert("", "end", values=vals)
+            rows.append(vals)
+        total = len(rows)
+        if total == 0:
+            return
+        chunk = total // 10 or 1   # 运行时推导，大表分批插入避免逐行卡死 UI
+        pos = 0
+        def _batch():
+            nonlocal pos
+            for vals in rows[pos:pos + chunk]:
+                self.tv.insert("", "end", values=vals)
+            pos += chunk
+            if pos < total:
+                self.after(1, _batch)
+        _batch()
 
     def _sort_table(self, col):
         if getattr(self, "_table_df", None) is None:
@@ -385,7 +406,7 @@ class DataPage(ctk.CTkFrame):
         t = self.type.get()
 
         if self.df is None:
-            ctk.CTkLabel(self.dyn, text="（导入数据后即可选择变量）",
+            ctk.CTkLabel(self.dyn, text=tr("（导入数据后即可选择变量）"),
                          font=ctk.CTkFont(size=12), text_color="gray45").grid(
                 row=0, column=0, sticky="w", padx=4, pady=4)
             return
@@ -393,17 +414,17 @@ class DataPage(ctk.CTkFrame):
         if t in ("描述统计", "正态性检验"):
             cols = self._numeric_columns()
             if not cols:
-                ctk.CTkLabel(self.dyn, text="（数据中没有数值列）",
+                ctk.CTkLabel(self.dyn, text=tr("（数据中没有数值列）"),
                              font=ctk.CTkFont(size=12), text_color="gray45").grid(
                     row=0, column=0, sticky="w", padx=4, pady=4)
                 return
-            ctk.CTkLabel(self.dyn, text="勾选要分析的数值列：",
+            ctk.CTkLabel(self.dyn, text=tr("勾选要分析的数值列："),
                          font=ctk.CTkFont(size=12)).grid(row=0, column=0, sticky="w", padx=4, pady=(2, 2))
             for i, c in enumerate(cols):
                 var = ctk.BooleanVar(value=False)
                 self._col_vars[c] = var
                 ctk.CTkCheckBox(self.dyn, text=str(c), variable=var).grid(
-                    row=i + 1, column=0, sticky="w", padx=4, pady=1)
+                    row=i + 7, column=0, sticky="w", padx=4, pady=1)
         elif t == "t 检验":
             num = self._numeric_columns()
             allc = self._all_columns()
@@ -418,7 +439,7 @@ class DataPage(ctk.CTkFrame):
         elif t == "卡方检验":
             cat = self._cat_columns()
             if len(cat) < 2:
-                ctk.CTkLabel(self.dyn, text="（需要至少 2 个分类列）",
+                ctk.CTkLabel(self.dyn, text=tr("（需要至少 2 个分类列）"),
                              font=ctk.CTkFont(size=12), text_color="gray45").grid(
                     row=0, column=0, sticky="w", padx=4, pady=4)
                 return
@@ -433,22 +454,44 @@ class DataPage(ctk.CTkFrame):
         elif t == "相关性检验":
             num = self._numeric_columns()
             if len(num) < 2:
-                ctk.CTkLabel(self.dyn, text="（需要至少 2 个数值列）",
+                ctk.CTkLabel(self.dyn, text=tr("（需要至少 2 个数值列）"),
                              font=ctk.CTkFont(size=12), text_color="gray45").grid(
                     row=0, column=0, sticky="w", padx=4, pady=4)
                 return
             self._dd(self.dyn, "变量 1（X）", num, 0)
             self._dd(self.dyn, "变量 2（Y）", num, 2, default=num[1])
-            ctk.CTkLabel(self.dyn, text="方法", font=ctk.CTkFont(size=12)).grid(
+            ctk.CTkLabel(self.dyn, text=tr("方法"), font=ctk.CTkFont(size=12)).grid(
                 row=4, column=0, sticky="w", padx=4, pady=(4, 1))
             dd = ctk.CTkOptionMenu(self.dyn, values=["Pearson", "Spearman"])
             dd.grid(row=5, column=0, sticky="ew", padx=4, pady=(0, 4))
             dd.set("Pearson")
             self.dyn_widgets.append(dd)
+        elif t == "偏相关分析":
+            num = self._numeric_columns()
+            if len(num) < 3:
+                ctk.CTkLabel(self.dyn, text=tr("（需要至少 3 个数值列：X、Y及至少 1 个控制变量）"),
+                             font=ctk.CTkFont(size=12), text_color="gray45").grid(
+                    row=0, column=0, sticky="w", padx=4, pady=4)
+                return
+            self._dd(self.dyn, "变量 1（X）", num, 0)
+            self._dd(self.dyn, "变量 2（Y）", num, 2, default=num[1])
+            ctk.CTkLabel(self.dyn, text=tr("方法"), font=ctk.CTkFont(size=12)).grid(
+                row=4, column=0, sticky="w", padx=4, pady=(4, 1))
+            dd = ctk.CTkOptionMenu(self.dyn, values=["Pearson", "Spearman"])
+            dd.grid(row=5, column=0, sticky="ew", padx=4, pady=(0, 4))
+            dd.set("Pearson")
+            self.dyn_widgets.append(dd)
+            ctk.CTkLabel(self.dyn, text=tr("控制变量（勾选≥1 个，≠X/Y）："),
+                         font=ctk.CTkFont(size=12)).grid(row=6, column=0, sticky="w", padx=4, pady=(2, 2))
+            for i, c in enumerate(num):
+                var = ctk.BooleanVar(value=False)
+                self._col_vars[c] = var
+                ctk.CTkCheckBox(self.dyn, text=str(c), variable=var).grid(
+                    row=i + 7, column=0, sticky="w", padx=4, pady=1)
         elif t == "配对 t 检验":
             num = self._numeric_columns()
             if len(num) < 2:
-                ctk.CTkLabel(self.dyn, text="（需要至少 2 个数值列）",
+                ctk.CTkLabel(self.dyn, text=tr("（需要至少 2 个数值列）"),
                              font=ctk.CTkFont(size=12), text_color="gray45").grid(
                     row=0, column=0, sticky="w", padx=4, pady=4)
                 return
@@ -463,7 +506,7 @@ class DataPage(ctk.CTkFrame):
         elif t == "Wilcoxon 符号秩":
             num = self._numeric_columns()
             if len(num) < 2:
-                ctk.CTkLabel(self.dyn, text="（需要至少 2 个数值列）",
+                ctk.CTkLabel(self.dyn, text=tr("（需要至少 2 个数值列）"),
                              font=ctk.CTkFont(size=12), text_color="gray45").grid(
                     row=0, column=0, sticky="w", padx=4, pady=4)
                 return
@@ -478,17 +521,17 @@ class DataPage(ctk.CTkFrame):
         elif t == "Friedman 检验":
             num = self._numeric_columns()
             if len(num) < 2:
-                ctk.CTkLabel(self.dyn, text="（需要至少 2 个测量条件列）",
+                ctk.CTkLabel(self.dyn, text=tr("（需要至少 2 个测量条件列）"),
                              font=ctk.CTkFont(size=12), text_color="gray45").grid(
                     row=0, column=0, sticky="w", padx=4, pady=4)
                 return
-            ctk.CTkLabel(self.dyn, text="勾选测量条件列（同一批对象）：",
+            ctk.CTkLabel(self.dyn, text=tr("勾选测量条件列（同一批对象）："),
                          font=ctk.CTkFont(size=12)).grid(row=0, column=0, sticky="w", padx=4, pady=(2, 2))
             for i, c in enumerate(num):
                 var = ctk.BooleanVar(value=False)
                 self._col_vars[c] = var
                 ctk.CTkCheckBox(self.dyn, text=str(c), variable=var).grid(
-                    row=i + 1, column=0, sticky="w", padx=4, pady=1)
+                    row=i + 7, column=0, sticky="w", padx=4, pady=1)
         elif t == "事后多重比较":
             num = self._numeric_columns()
             allc = self._all_columns()
@@ -499,39 +542,39 @@ class DataPage(ctk.CTkFrame):
         elif t == "单样本 t 检验":
             num = self._numeric_columns()
             if not num:
-                ctk.CTkLabel(self.dyn, text="（数据中没有数值列）",
+                ctk.CTkLabel(self.dyn, text=tr("（数据中没有数值列）"),
                              font=ctk.CTkFont(size=12), text_color="gray45").grid(
                     row=0, column=0, sticky="w", padx=4, pady=4)
                 return
             self._dd(self.dyn, "变量列", num, 0)
-            ctk.CTkLabel(self.dyn, text="检验值 μ0（默认 0）", font=ctk.CTkFont(size=12)).grid(
+            ctk.CTkLabel(self.dyn, text=tr("检验值 μ0（默认 0）"), font=ctk.CTkFont(size=12)).grid(
                 row=2, column=0, sticky="w", padx=4, pady=(4, 1))
-            mu_entry = ctk.CTkEntry(self.dyn, placeholder_text="例如：5")
+            mu_entry = ctk.CTkEntry(self.dyn, placeholder_text=tr("例如：5"))
             mu_entry.grid(row=3, column=0, sticky="ew", padx=4, pady=(0, 4))
             mu_entry.insert(0, "0")
             self.dyn_widgets.append(mu_entry)
         elif t == "比例检验":
             cat = self._cat_columns()
             if not cat:
-                ctk.CTkLabel(self.dyn, text="（数据中没有分类列）",
+                ctk.CTkLabel(self.dyn, text=tr("（数据中没有分类列）"),
                              font=ctk.CTkFont(size=12), text_color="gray45").grid(
                     row=0, column=0, sticky="w", padx=4, pady=4)
                 return
             self._dd(self.dyn, "分类变量（二分类）", cat, 0)
-            ctk.CTkLabel(self.dyn, text="成功水平（留空自动）", font=ctk.CTkFont(size=12)).grid(
+            ctk.CTkLabel(self.dyn, text=tr("成功水平（留空自动）"), font=ctk.CTkFont(size=12)).grid(
                 row=2, column=0, sticky="w", padx=4, pady=(4, 1))
-            succ_entry = ctk.CTkEntry(self.dyn, placeholder_text="自动：数值列取 1，文本取第 2 个水平")
+            succ_entry = ctk.CTkEntry(self.dyn, placeholder_text=tr("自动：数值列取 1，文本取第 2 个水平"))
             succ_entry.grid(row=3, column=0, sticky="ew", padx=4, pady=(0, 4))
-            ctk.CTkLabel(self.dyn, text="检验比例 p0（默认 0.5）", font=ctk.CTkFont(size=12)).grid(
+            ctk.CTkLabel(self.dyn, text=tr("检验比例 p0（默认 0.5）"), font=ctk.CTkFont(size=12)).grid(
                 row=4, column=0, sticky="w", padx=4, pady=(4, 1))
-            p0_entry = ctk.CTkEntry(self.dyn, placeholder_text="例如：0.5")
+            p0_entry = ctk.CTkEntry(self.dyn, placeholder_text=tr("例如：0.5"))
             p0_entry.grid(row=5, column=0, sticky="ew", padx=4, pady=(0, 4))
             p0_entry.insert(0, "0.5")
             self.dyn_widgets += [succ_entry, p0_entry]
         elif t == "McNemar 检验":
             cat = self._cat_columns()
             if len(cat) < 2:
-                ctk.CTkLabel(self.dyn, text="（需要至少 2 个二分类列）",
+                ctk.CTkLabel(self.dyn, text=tr("（需要至少 2 个二分类列）"),
                              font=ctk.CTkFont(size=12), text_color="gray45").grid(
                     row=0, column=0, sticky="w", padx=4, pady=4)
                 return
@@ -541,47 +584,47 @@ class DataPage(ctk.CTkFrame):
             cat = self._cat_columns()
             num = self._numeric_columns()
             if not cat:
-                ctk.CTkLabel(self.dyn, text="（数据中没有二分类因变量）",
+                ctk.CTkLabel(self.dyn, text=tr("（数据中没有二分类因变量）"),
                              font=ctk.CTkFont(size=12), text_color="gray45").grid(
                     row=0, column=0, sticky="w", padx=4, pady=4)
                 return
             self._dd(self.dyn, "因变量 Y（二分类）", cat, 0)
-            ctk.CTkLabel(self.dyn, text="勾选自变量（数值列）：",
+            ctk.CTkLabel(self.dyn, text=tr("勾选自变量（数值列）："),
                          font=ctk.CTkFont(size=12)).grid(row=2, column=0, sticky="w", padx=4, pady=(2, 2))
             for i, c in enumerate(num):
                 var = ctk.BooleanVar(value=False)
                 self._col_vars[c] = var
                 ctk.CTkCheckBox(self.dyn, text=str(c), variable=var).grid(
-                    row=i + 3, column=0, sticky="w", padx=4, pady=1)
+                    row=i + 7, column=0, sticky="w", padx=4, pady=1)
         elif t == "多元线性回归":
             num = self._numeric_columns()
             if len(num) < 3:
-                ctk.CTkLabel(self.dyn, text="（需要至少 3 个数值列：1 个因变量 + 2 个自变量）",
+                ctk.CTkLabel(self.dyn, text=tr("（需要至少 3 个数值列：1 个因变量 + 2 个自变量）"),
                              font=ctk.CTkFont(size=12), text_color="gray45").grid(
                     row=0, column=0, sticky="w", padx=4, pady=4)
                 return
             self._dd(self.dyn, "因变量 Y（数值列）", num, 0)
-            ctk.CTkLabel(self.dyn, text="勾选自变量（≥2 个数值列）：",
+            ctk.CTkLabel(self.dyn, text=tr("勾选自变量（≥2 个数值列）："),
                          font=ctk.CTkFont(size=12)).grid(row=2, column=0, sticky="w", padx=4, pady=(2, 2))
             for i, c in enumerate(num):
                 var = ctk.BooleanVar(value=False)
                 self._col_vars[c] = var
                 ctk.CTkCheckBox(self.dyn, text=str(c), variable=var).grid(
-                    row=i + 3, column=0, sticky="w", padx=4, pady=1)
+                    row=i + 7, column=0, sticky="w", padx=4, pady=1)
         elif t == "信度分析 (Cronbach's α)":
             num = self._numeric_columns()
             if len(num) < 2:
-                ctk.CTkLabel(self.dyn, text="（需要至少 2 个题项列）",
+                ctk.CTkLabel(self.dyn, text=tr("（需要至少 2 个题项列）"),
                              font=ctk.CTkFont(size=12), text_color="gray45").grid(
                     row=0, column=0, sticky="w", padx=4, pady=4)
                 return
-            ctk.CTkLabel(self.dyn, text="勾选题项列（≥2）：",
+            ctk.CTkLabel(self.dyn, text=tr("勾选题项列（≥2）："),
                          font=ctk.CTkFont(size=12)).grid(row=0, column=0, sticky="w", padx=4, pady=(2, 2))
             for i, c in enumerate(num):
                 var = ctk.BooleanVar(value=False)
                 self._col_vars[c] = var
                 ctk.CTkCheckBox(self.dyn, text=str(c), variable=var).grid(
-                    row=i + 1, column=0, sticky="w", padx=4, pady=1)
+                    row=i + 7, column=0, sticky="w", padx=4, pady=1)
 
     def _cat_columns(self):
         """分类列：非数值列，或取值很少的数值列。"""
@@ -618,14 +661,14 @@ class DataPage(ctk.CTkFrame):
         self._clear(self.plot_dyn)
         self.plot_widgets = []
         if self.df is None:
-            ctk.CTkLabel(self.plot_dyn, text="（导入数据后即可绘图）",
+            ctk.CTkLabel(self.plot_dyn, text=tr("（导入数据后即可绘图）"),
                          font=ctk.CTkFont(size=12), text_color="gray45").grid(
                 row=0, column=0, sticky="w", padx=4, pady=4)
             return
         pt = self.plot_type_dd.get()
         num = self._numeric_columns()
         if not num:
-            ctk.CTkLabel(self.plot_dyn, text="（数据中没有数值列）",
+            ctk.CTkLabel(self.plot_dyn, text=tr("（数据中没有数值列）"),
                          font=ctk.CTkFont(size=12), text_color="gray45").grid(
                 row=0, column=0, sticky="w", padx=4, pady=4)
             return
@@ -723,6 +766,18 @@ class DataPage(ctk.CTkFrame):
                 self.corr = correlation_test(self.df, x_col, y_col,
                                              method=m_dd.get(), alpha=alpha)
                 self._print_corr(self.corr)
+            elif t == "偏相关分析":
+                x_dd, y_dd, m_dd = self.dyn_widgets
+                x_col, y_col = x_dd.get(), y_dd.get()
+                if not self._distinct(x_col, y_col, "X 与 Y"):
+                    return
+                controls = [c for c in self._selected_cols() if c not in (x_col, y_col)]
+                if not controls:
+                    self._write("请至少勾选 1 个控制变量（不同于 X/Y）。")
+                    return
+                self.partial = partial_correlation(
+                    self.df, x_col, y_col, controls, method=m_dd.get(), alpha=alpha)
+                self._print_partial(self.partial)
             elif t == "配对 t 检验":
                 pre_dd, post_dd = self.dyn_widgets
                 pre_c, post_c = pre_dd.get(), post_dd.get()
@@ -884,6 +939,13 @@ class DataPage(ctk.CTkFrame):
             self._show_figure(fig)
         except Exception:
             pass
+
+    def _print_partial(self, r):
+        self._write(f"【{r['方法']}】")
+        ctrl = "、".join(r["控制变量"]) if r["控制变量"] else "（无）"
+        self._write(f"变量：{r['X']} 与 {r['Y']}（控制：{ctrl}）；样本量={r['样本量']}，自由度={r['自由度']}")
+        self._write(f"偏相关系数 r={r['偏相关系数 r']:.4f}，p 值={format_p(r['p 值'])}，强度：{r['强度']}")
+        self._write(f"\n结论：{r['结论']}")
 
     def _print_paired(self, r):
         self._write("【配对 t 检验】")
@@ -1125,17 +1187,17 @@ class DataPage(ctk.CTkFrame):
 
     def _show_figure(self, fig):
         self._clear_plot()
-        self._canvas = FigureCanvasTkAgg(fig, master=self.plot_frame)
-        self._canvas.get_tk_widget().grid(row=0, column=0, sticky="nsew")
-        self._canvas.draw()
+        self._mp_canvas = FigureCanvasTkAgg(fig, master=self.plot_frame)
+        self._mp_canvas.get_tk_widget().grid(row=0, column=0, sticky="nsew")
+        self._mp_canvas.draw()
 
     def _clear_plot(self):
-        if self._canvas is not None:
+        if self._mp_canvas is not None:
             try:
-                self._canvas.get_tk_widget().destroy()
+                self._mp_canvas.get_tk_widget().destroy()
             except Exception:
                 pass
-            self._canvas = None
+            self._mp_canvas = None
 
     # ================= 导出报告 =================
     def _export(self):
@@ -1176,6 +1238,49 @@ class DataPage(ctk.CTkFrame):
         except Exception as e:
             self._write(f"导出失败：{e}")
             messagebox.showerror("导出失败", str(e))
+
+    def _collect_results(self):
+        """把本次已生成的全部分析结果汇成 {名称: 结果} 字典（供 LaTeX 报告用）。"""
+        mapping = [
+            ("描述统计", self.desc_table), ("正态性检验", self.norm_table),
+            ("独立样本 t 检验", self.ttest), ("简单线性回归", self.reg),
+            ("卡方独立性检验", self.chi2), ("方差分析 ANOVA", self.anova),
+            ("相关性检验", self.corr), ("偏相关分析", self.partial),
+            ("配对 t 检验", self.paired), ("Mann-Whitney U", self.mw),
+            ("Wilcoxon 符号秩", self.wsr), ("Kruskal-Wallis", self.kw),
+            ("Friedman 检验", self.fried), ("事后多重比较", self.post),
+            ("单样本 t 检验", self.osamp), ("比例检验", self.prop),
+            ("McNemar 检验", self.mcn), ("逻辑回归", self.logreg),
+            ("多元线性回归", self.multireg), ("信度分析 Cronbach's α", self.cron),
+        ]
+        out = {}
+        for label, val in mapping:
+            if val is not None and (not hasattr(val, "empty") or not val.empty):
+                out[label] = val
+        return out
+
+    def _export_latex(self):
+        if self.df is None:
+            self._write("请先导入数据。")
+            return
+        try:
+            from tkinter import messagebox
+            results = self._collect_results()
+            if not results:
+                self._write("请先运行一次分析，再导出 LaTeX 报告。")
+                return
+            stats_latex.export_latex(
+                self, result=results, title="统计分析报告", kind="统计分析",
+                problem_lines=[f"数据文件：{self.file_name}",
+                               f"观测数：{self.df.shape[0]} 行，{self.df.shape[1]} 列"])
+            if getattr(self, "history", None):
+                self.history.log_op("数据分析", "导出LaTeX报告")
+        except Exception as e:
+            self._write(f"LaTeX 导出失败：{e}")
+            try:
+                messagebox.showerror("导出失败", str(e))
+            except Exception:
+                pass
 
     def _save_pdf(self, docx_bytes, pdf_path):
         """把 Word 报告字节转成 PDF：借助本机 MS Word（docx2pdf）。

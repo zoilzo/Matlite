@@ -138,5 +138,18 @@ def show_updates(app, data):
     if ann and ann.get("id"):
         _S.set_val("last_seen_id", ann["id"])
 
+    from modules import ui_kit as _ui
+    _repo = (_S.get("release_repo", "zoilzo/MatLite") or "zoilzo/MatLite").replace("\\", "/")
+    ctk.CTkButton(dlg, text="💬 前往 GitHub 讨论 / 提 issue", height=30, fg_color="gray45",
+                  command=lambda: webbrowser.open("https://github.com/%s/discussions" % _repo)
+                  ).grid(row=3, column=0, padx=_ui.SPACE["lg"], pady=(0, _ui.SPACE["sm"]), sticky="w")
+
+    # 插件下载入口：提示用户可前往 GitHub 下载插件（有插件商店地址则打开商店页）
+    _store = (_S.get("plugin_store", "") or "").strip()
+    if _store:
+        ctk.CTkButton(dlg, text="🧩 插件：前往 GitHub 下载更多", height=30, fg_color="gray45",
+                      command=lambda: webbrowser.open(_store)
+                      ).grid(row=4, column=0, padx=_ui.SPACE["lg"], pady=(0, _ui.SPACE["sm"]), sticky="w")
+
     dlg.after(120, dlg.focus_set)
     dlg.grab_set()

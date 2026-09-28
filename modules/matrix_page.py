@@ -4,24 +4,26 @@
 import customtkinter as ctk
 from sympy import Matrix, MatrixBase, Symbol, symbols, Eq, pretty, sympify, oo, latex
 from modules.latex_view import sympy_to_image
+from modules import ui_kit as ui
+from modules.i18n import tr
 
 DIM_CHOICES = ["1", "2", "3", "4", "5"]
 
 
-class MatrixPage(ctk.CTkFrame):
+class MatrixPage(ui.BasePage):
     def __init__(self, master):
-        super().__init__(master, fg_color="transparent")
+        super().__init__(master)
         self.grid_columnconfigure(0, weight=0)
         self.grid_columnconfigure(1, weight=1)
         self.grid_rowconfigure(0, weight=1)
 
         # ================= 左侧：输入与控制 =================
-        left = ctk.CTkScrollableFrame(self, width=440, corner_radius=12, label_text="矩阵输入")
+        left = self.left
         left.grid(row=0, column=0, sticky="nsew", padx=12, pady=12)
         left.grid_columnconfigure(1, weight=1)
 
         # ---- 矩阵 A ----
-        ctk.CTkLabel(left, text="矩阵 A", font=ctk.CTkFont(size=15, weight="bold")).grid(
+        ctk.CTkLabel(left, text=tr("矩阵 A"), font=ctk.CTkFont(size=15, weight="bold")).grid(
             row=0, column=0, sticky="w", padx=(14, 0), pady=(8, 0))
         self.a_rows = ctk.CTkSegmentedButton(left, values=DIM_CHOICES, command=lambda _v: self._rebuild_a())
         self.a_rows.grid(row=0, column=1, sticky="w", padx=8)
@@ -29,20 +31,20 @@ class MatrixPage(ctk.CTkFrame):
         self.a_cols = ctk.CTkSegmentedButton(left, values=DIM_CHOICES, command=lambda _v: self._rebuild_a())
         self.a_cols.grid(row=0, column=2, sticky="w", padx=(8, 14))
         self.a_cols.set("2")
-        ctk.CTkLabel(left, text="行", font=ctk.CTkFont(size=11), text_color="gray").grid(row=1, column=1, sticky="w", padx=12)
-        ctk.CTkLabel(left, text="列", font=ctk.CTkFont(size=11), text_color="gray").grid(row=1, column=2, sticky="w", padx=(8, 0))
+        ctk.CTkLabel(left, text=tr("行"), font=ctk.CTkFont(size=11), text_color="gray").grid(row=1, column=1, sticky="w", padx=12)
+        ctk.CTkLabel(left, text=tr("列"), font=ctk.CTkFont(size=11), text_color="gray").grid(row=1, column=2, sticky="w", padx=(8, 0))
 
         self.a_frame = ctk.CTkFrame(left, fg_color="transparent")
         self.a_frame.grid(row=2, column=0, columnspan=3, sticky="ew", padx=14, pady=(6, 4))
         self.a_entries = []
         self._rebuild_a()
 
-        ctk.CTkLabel(left, text="提示：单元格可填分数，如 1/2；留空按 0 处理。",
+        ctk.CTkLabel(left, text=tr("提示：单元格可填分数，如 1/2；留空按 0 处理。"),
                      font=ctk.CTkFont(size=11), text_color="gray45").grid(
             row=3, column=0, columnspan=3, sticky="w", padx=14, pady=(0, 8))
 
         # ---- 矩阵 B（可选）----
-        self.use_b = ctk.CTkCheckBox(left, text="使用矩阵 B（加减乘用）", command=self._toggle_b)
+        self.use_b = ctk.CTkCheckBox(left, text=tr("使用矩阵 B（加减乘用）"), command=self._toggle_b)
         self.use_b.grid(row=4, column=0, columnspan=3, sticky="w", padx=14, pady=(10, 2))
         self.b_frame = ctk.CTkFrame(left, fg_color="transparent")
         self.b_frame.grid(row=5, column=0, columnspan=3, sticky="ew", padx=14, pady=(6, 4))
@@ -54,11 +56,11 @@ class MatrixPage(ctk.CTkFrame):
         self.b_cols.set("2")
         self.b_entries = []
         self._rebuild_b()
-        ctk.CTkLabel(left, text="矩阵 B 行", font=ctk.CTkFont(size=11), text_color="gray").grid(row=7, column=1, sticky="w", padx=12)
-        ctk.CTkLabel(left, text="列", font=ctk.CTkFont(size=11), text_color="gray").grid(row=7, column=2, sticky="w", padx=(8, 0))
+        ctk.CTkLabel(left, text=tr("矩阵 B 行"), font=ctk.CTkFont(size=11), text_color="gray").grid(row=7, column=1, sticky="w", padx=12)
+        ctk.CTkLabel(left, text=tr("列"), font=ctk.CTkFont(size=11), text_color="gray").grid(row=7, column=2, sticky="w", padx=(8, 0))
 
         # ---- 方程组 b 向量（可选）----
-        self.use_bvec = ctk.CTkCheckBox(left, text="解方程组 A·x = b（填写 b 向量）", command=self._toggle_bvec)
+        self.use_bvec = ctk.CTkCheckBox(left, text=tr("解方程组 A·x = b（填写 b 向量）"), command=self._toggle_bvec)
         self.use_bvec.grid(row=8, column=0, columnspan=3, sticky="w", padx=14, pady=(10, 2))
         self.bv_frame = ctk.CTkFrame(left, fg_color="transparent")
         self.bv_frame.grid(row=9, column=0, columnspan=3, sticky="ew", padx=14, pady=(6, 4))
@@ -66,7 +68,7 @@ class MatrixPage(ctk.CTkFrame):
         self._rebuild_bvec()
 
         # ---- 运算按钮 ----
-        ctk.CTkLabel(left, text="选择运算", font=ctk.CTkFont(size=15, weight="bold")).grid(
+        ctk.CTkLabel(left, text=tr("选择运算"), font=ctk.CTkFont(size=15, weight="bold")).grid(
             row=10, column=0, sticky="w", padx=14, pady=(14, 6))
         ops = [
             ("A + B", "add"), ("A − B", "sub"), ("A × B", "mul"),
@@ -81,7 +83,7 @@ class MatrixPage(ctk.CTkFrame):
             self.op_btns[key] = btn
 
         # ================= 右侧：结果 =================
-        right = ctk.CTkFrame(self, corner_radius=12)
+        right = self.right
         right.grid(row=0, column=1, sticky="nsew", padx=(0, 12), pady=12)
         right.grid_rowconfigure(2, weight=1)
         right.grid_columnconfigure(0, weight=1)
@@ -89,12 +91,12 @@ class MatrixPage(ctk.CTkFrame):
         hdr = ctk.CTkFrame(right, fg_color="transparent")
         hdr.grid(row=0, column=0, sticky="ew", padx=16, pady=(14, 4))
         hdr.grid_columnconfigure(0, weight=1)
-        ctk.CTkLabel(hdr, text="计算结果（分数精确显示）", font=ctk.CTkFont(size=14, weight="bold")).grid(
+        ctk.CTkLabel(hdr, text=tr("计算结果（分数精确显示）"), font=ctk.CTkFont(size=14, weight="bold")).grid(
             row=0, column=0, sticky="w")
-        self.ltx_btn = ctk.CTkButton(hdr, text="📋 复制 LaTeX", width=120, height=28,
+        self.ltx_btn = ctk.CTkButton(hdr, text=tr("📋 复制 LaTeX"), width=120, height=28,
                                      fg_color="gray40", command=self._copy_latex)
         self.ltx_btn.grid(row=0, column=1, sticky="e")
-        self.repro_btn = ctk.CTkButton(hdr, text="📦 导出复现", width=120, height=28,
+        self.repro_btn = ctk.CTkButton(hdr, text=tr("📦 导出复现"), width=120, height=28,
                                        fg_color="steelblue", command=self._export_repro)
         self.repro_btn.grid(row=0, column=2, sticky="e", padx=(8, 0))
         hdr.grid_columnconfigure(1, weight=0)
@@ -106,7 +108,7 @@ class MatrixPage(ctk.CTkFrame):
         self.pv_frame.grid_propagate(False)
         self.pv_frame.grid_rowconfigure(0, weight=1)
         self.pv_frame.grid_columnconfigure(0, weight=1)
-        self.pv_label = ctk.CTkLabel(self.pv_frame, text="公式预览",
+        self.pv_label = ctk.CTkLabel(self.pv_frame, text=tr("公式预览"),
                                      font=ctk.CTkFont(size=13), text_color="gray50")
         self.pv_label.grid(row=0, column=0)
 

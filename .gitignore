@@ -44,6 +44,11 @@ Thumbs.db
 .github_token
 .Rhistory
 
+# 插件生成守卫运行时文件（startup_plugin_agent.py 写入）
+plugin_task.lock
+plugin_task.marker
+plugin_request.pending
+
 # IDE
 .vscode/
 .idea/

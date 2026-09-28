@@ -13,6 +13,8 @@ from matplotlib import colors as mcolors
 import customtkinter as ctk
 
 from modules.expr_utils import nums
+from modules import ui_kit as ui
+from modules.i18n import tr
 
 plt.rcParams["font.sans-serif"] = ["Microsoft YaHei", "SimHei", "DejaVu Sans"]
 plt.rcParams["axes.unicode_minus"] = False
@@ -48,35 +50,34 @@ def _func_ptr(expr):
     return f, e, sp
 
 
-class ComplexPage(ctk.CTkFrame):
+class ComplexPage(ui.BasePage):
     def __init__(self, master):
-        super().__init__(master, fg_color="transparent")
+        super().__init__(master)
         self.grid_columnconfigure(1, weight=1)
         self.grid_rowconfigure(0, weight=1)
 
         # ================= 左：参数面板 =================
-        left = ctk.CTkScrollableFrame(self, width=380, corner_radius=14, label_text="复变函数")
-        left.grid(row=0, column=0, sticky="nsew", padx=13, pady=9)
+        left = self.left
         left.grid_columnconfigure(0, weight=1)
 
-        ctk.CTkLabel(left, text="函数 f(z)", font=ctk.CTkFont(size=12, weight="bold")).grid(
+        ctk.CTkLabel(left, text=tr("函数 f(z)"), font=ctk.CTkFont(size=12, weight="bold")).grid(
             row=0, column=0, sticky="w", padx=12, pady=(10, 2))
         self.fexpr = ctk.CTkEntry(left, height=34)
         self.fexpr.grid(row=1, column=0, sticky="ew", padx=9)
         self.fexpr.insert(0, "z**2 + 1")
 
-        ctk.CTkLabel(left, text="操作", font=ctk.CTkFont(size=12)).grid(row=2, column=0, sticky="w", padx=12, pady=(10, 4))
+        ctk.CTkLabel(left, text=tr("操作"), font=ctk.CTkFont(size=12)).grid(row=2, column=0, sticky="w", padx=12, pady=(10, 4))
         self.op = ctk.CTkOptionMenu(left, values=OPS)
         self.op.grid(row=3, column=0, sticky="ew", padx=9)
         self.op.set(OPS[1])
 
-        ctk.CTkLabel(left, text="求值点 z0（如 1+2i）", font=ctk.CTkFont(size=12)).grid(
+        ctk.CTkLabel(left, text=tr("求值点 z0（如 1+2i）"), font=ctk.CTkFont(size=12)).grid(
             row=4, column=0, sticky="w", padx=12, pady=(8, 2))
         self.z0 = ctk.CTkEntry(left, height=32)
         self.z0.grid(row=5, column=0, sticky="ew", padx=12)
         self.z0.insert(0, "1+i")
 
-        ctk.CTkLabel(left, text="区域范围（用于绘图）", font=ctk.CTkFont(size=12)).grid(
+        ctk.CTkLabel(left, text=tr("区域范围（用于绘图）"), font=ctk.CTkFont(size=12)).grid(
             row=6, column=0, sticky="w", padx=14, pady=(8, 2))
         self.xr = ctk.CTkEntry(left, height=32)
         self.xr.grid(row=7, column=0, sticky="ew", padx=12, pady=(0, 6))
@@ -85,7 +86,7 @@ class ComplexPage(ctk.CTkFrame):
         self.yr.grid(row=8, column=0, sticky="ew", padx=12)
         self.yr.insert(0, "-2 2")
 
-        ctk.CTkButton(left, text="⚡ 计 算", height=40, command=self._run).grid(
+        ctk.CTkButton(left, text=tr("⚡ 计 算"), height=40, command=self._run).grid(
             row=9, column=0, sticky="ew", padx=12, pady=(10, 4))
 
         tip = ("说明：\n"
@@ -100,35 +101,23 @@ class ComplexPage(ctk.CTkFrame):
             row=10, column=0, sticky="w", padx=14, pady=(6, 12))
 
         # ================= 右：结果 + 画布 =================
-        right = ctk.CTkFrame(self, corner_radius=12)
-        right.grid(row=0, column=1, sticky="nsew", padx=(0, 12), pady=12)
+        right = self.right
         right.grid_columnconfigure(0, weight=1)
         right.grid_rowconfigure(1, weight=1)
 
         hdr = ctk.CTkFrame(right, fg_color="transparent")
         hdr.grid(row=0, column=0, sticky="ew", padx=16, pady=(12, 4))
         hdr.grid_columnconfigure(0, weight=1)
-        ctk.CTkLabel(hdr, text="计算结果", font=ctk.CTkFont(size=14, weight="bold")).grid(
+        ctk.CTkLabel(hdr, text=tr("计算结果"), font=ctk.CTkFont(size=14, weight="bold")).grid(
             row=0, column=0, sticky="w")
-        self.repro_btn = ctk.CTkButton(hdr, text="📦 导出复现", width=120, height=28,
+        self.repro_btn = ctk.CTkButton(hdr, text=tr("📦 导出复现"), width=120, height=28,
                                        fg_color="steelblue", command=self._export_repro)
         self.repro_btn.grid(row=0, column=1, sticky="e", padx=(12, 0))
         hdr.grid_columnconfigure(1, weight=0)
         self.out = ctk.CTkTextbox(right, font=ctk.CTkFont(family="Consolas", size=13))
         self.out.grid(row=1, column=0, sticky="nsew", padx=16, pady=(0, 4))
-
-        box = ctk.CTkFrame(right, fg_color="transparent")
-        box.grid(row=2, column=0, sticky="nsew", padx=16, pady=(4, 4))
-        box.grid_rowconfigure(0, weight=1)
-        box.grid_columnconfigure(0, weight=1)
-        self.figure = plt.Figure(figsize=(7, 4.6), dpi=100)
-        self.ax = self.figure.add_subplot(111)
-        self.canvas = FigureCanvasTkAgg(self.figure, master=box)
-        self.canvas.get_tk_widget().pack(side="top", fill="both", expand=1)
-        toolbar = NavigationToolbar2Tk(self.canvas, box)
-        toolbar.update()
-        toolbar.pack(side="bottom", fill="x")
-        self.canvas.draw()
+        box, self.figure, self.canvas, _tb = self.show_plot()
+        self.ax = self.figure.gca()
 
     def _clear_out(self):
         self.out.configure(state="normal")

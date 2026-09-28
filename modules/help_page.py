@@ -4,13 +4,14 @@
 import customtkinter as ctk
 
 from modules.app_settings import APP_VERSION
+from modules import ui_kit as ui
 
 APP_NAME = "MatLite 数学工作台"
 
 
-class HelpPage(ctk.CTkFrame):
+class HelpPage(ui.BasePage):
     def __init__(self, master):
-        super().__init__(master, fg_color="transparent")
+        super().__init__(master, layout=False)
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(0, weight=1)
 

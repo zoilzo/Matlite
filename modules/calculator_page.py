@@ -5,6 +5,8 @@ import customtkinter as ctk
 from sympy import (symbols, sympify, diff, integrate, solve, limit, oo,
                    nsimplify, Symbol, pretty, Rational, latex)
 from modules.latex_view import sympy_to_image
+from modules import ui_kit as ui
+from modules.i18n import tr
 
 MODE_LABELS = ["数值求值", "求导", "积分", "解方程", "求极限"]
 
@@ -27,9 +29,9 @@ def _to_expr(text):
     return sympify(_norm(text), evaluate=True)
 
 
-class CalculatorPage(ctk.CTkFrame):
+class CalculatorPage(ui.BasePage):
     def __init__(self, master):
-        super().__init__(master, fg_color="transparent")
+        super().__init__(master)
         self.grid_columnconfigure(0, weight=0)
         self.grid_columnconfigure(1, weight=1)
         self.grid_rowconfigure(3, weight=1)
@@ -40,7 +42,7 @@ class CalculatorPage(ctk.CTkFrame):
         left.grid_propagate(False)
         left.grid_columnconfigure(0, weight=1)
 
-        ctk.CTkLabel(left, text="选择计算类型", font=ctk.CTkFont(size=14, weight="bold")).grid(
+        ctk.CTkLabel(left, text=tr("选择计算类型"), font=ctk.CTkFont(size=14, weight="bold")).grid(
             row=0, column=0, sticky="w", padx=16, pady=(14, 6))
 
         self.mode = ctk.CTkSegmentedButton(
@@ -48,7 +50,7 @@ class CalculatorPage(ctk.CTkFrame):
         self.mode.grid(row=1, column=0, sticky="ew", padx=16, pady=(0, 12))
 
         # 表达式
-        ctk.CTkLabel(left, text="表达式（可使用变量 x，支持 + - * / ** 、括号、函数）",
+        ctk.CTkLabel(left, text=tr("表达式（可使用变量 x，支持 + - * / ** 、括号、函数）"),
                      font=ctk.CTkFont(size=12), text_color="gray50").grid(
             row=2, column=0, sticky="w", padx=16, pady=(4, 2))
         self.expr = ctk.CTkEntry(left, height=42, font=ctk.CTkFont(size=16))
@@ -75,9 +77,9 @@ class CalculatorPage(ctk.CTkFrame):
         btns = ctk.CTkFrame(left, fg_color="transparent")
         btns.grid(row=5, column=0, sticky="ew", padx=16, pady=(4, 4))
         btns.grid_columnconfigure((0, 1), weight=1)
-        ctk.CTkButton(btns, text="⚡ 计 算", height=40, command=self._run).grid(
+        ctk.CTkButton(btns, text=tr("⚡ 计 算"), height=40, command=self._run).grid(
             row=0, column=0, sticky="ew", padx=(0, 6))
-        ctk.CTkButton(btns, text="示例", fg_color="gray40", height=40,
+        ctk.CTkButton(btns, text=tr("示例"), fg_color="gray40", height=40,
                       command=self._example).grid(row=0, column=1, sticky="ew")
 
         # 常用函数说明
@@ -96,7 +98,7 @@ class CalculatorPage(ctk.CTkFrame):
             row=6, column=0, sticky="w", padx=16, pady=(2, 14))
 
         # ---------- 右：结果区 ----------
-        right = ctk.CTkFrame(self, corner_radius=12)
+        right = self.right
         right.grid(row=0, column=1, rowspan=4, sticky="nsew", padx=(0, 12), pady=12)
         right.grid_rowconfigure(2, weight=1)
         right.grid_columnconfigure(0, weight=1)
@@ -104,9 +106,9 @@ class CalculatorPage(ctk.CTkFrame):
         hdr = ctk.CTkFrame(right, fg_color="transparent")
         hdr.grid(row=0, column=0, sticky="ew", padx=16, pady=(14, 4))
         hdr.grid_columnconfigure(0, weight=1)
-        ctk.CTkLabel(hdr, text="计算结果", font=ctk.CTkFont(size=14, weight="bold")).grid(
+        ctk.CTkLabel(hdr, text=tr("计算结果"), font=ctk.CTkFont(size=14, weight="bold")).grid(
             row=0, column=0, sticky="w")
-        self.ltx_btn = ctk.CTkButton(hdr, text="📋 复制 LaTeX", width=120, height=28,
+        self.ltx_btn = ctk.CTkButton(hdr, text=tr("📋 复制 LaTeX"), width=120, height=28,
                                      fg_color="gray40", command=self._copy_latex)
         self.ltx_btn.grid(row=0, column=1, sticky="e")
 
@@ -116,7 +118,7 @@ class CalculatorPage(ctk.CTkFrame):
         self.pv_frame.grid_propagate(False)
         self.pv_frame.grid_rowconfigure(0, weight=1)
         self.pv_frame.grid_columnconfigure(0, weight=1)
-        self.pv_label = ctk.CTkLabel(self.pv_frame, text="公式预览",
+        self.pv_label = ctk.CTkLabel(self.pv_frame, text=tr("公式预览"),
                                      font=ctk.CTkFont(size=13), text_color="gray50")
         self.pv_label.grid(row=0, column=0)
 

@@ -181,6 +181,16 @@ class FeedbackDialog(ctk.CTkToplevel):
         except Exception:
             pass
 
+    @staticmethod
+    def _gh_url():
+        from modules import app_settings as _S
+        repo = _S.get("release_repo", "zoilzo/MatLite") or "zoilzo/MatLite"
+        return "https://github.com/%s/discussions" % repo.replace("\\", "/")
+
+    def _open_gh(self):
+        import webbrowser
+        webbrowser.open(self._gh_url())
+
     def _build(self):
         """底部按钮栏先占位（任何尺寸下都不被挤掉），中部字段放进可滚动区。"""
         # 1) 先钉住底部：按钮栏 + 结果提示，永远有空间，不会被上方字段压缩成 1px
@@ -193,6 +203,8 @@ class FeedbackDialog(ctk.CTkToplevel):
             side="left", fill="x", expand=True, padx=(0, 4))
         ctk.CTkButton(btns, text="取消", height=36, fg_color="gray40", command=self.destroy).pack(
             side="left", fill="x", expand=True, padx=(4, 0))
+        ctk.CTkButton(btns, text="💬 GitHub 讨论/提 issue", height=36, fg_color="gray45",
+                      command=self._open_gh).pack(side="left", fill="x", expand=True, padx=(4, 0))
 
         self.result = ctk.CTkLabel(bottom, text="", font=ctk.CTkFont(size=13),
                                    text_color="#2a7f5c", wraplength=580, justify="left", anchor="w")

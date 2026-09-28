@@ -17,6 +17,8 @@ import requests
 import customtkinter as ctk
 
 from modules import ai_tools as _at
+from modules import ui_kit as ui
+from modules.i18n import tr
 
 MAX_TOOL_ROUNDS = 5  # 工具调用轮次上限，防止无限循环
 
@@ -80,9 +82,9 @@ def _result_summary(page):
     return "\n".join(lines)
 
 
-class AiPage(ctk.CTkFrame):
+class AiPage(ui.BasePage):
     def __init__(self, master, app=None):
-        super().__init__(master, fg_color="transparent")
+        super().__init__(master, layout=False)
         self.app = app
         # 配置存用户目录（%APPDATA%\MatLite\config.json），打包安装后普通用户也能读写
         base_dir = os.environ.get("APPDATA") or os.path.expanduser("~")
@@ -105,7 +107,7 @@ class AiPage(ctk.CTkFrame):
         self.grid_rowconfigure(0, weight=1)
 
         # ================= 左：设置 =================
-        left = ctk.CTkScrollableFrame(self, width=350, corner_radius=12, label_text="本地 AI 设置")
+        left = ctk.CTkScrollableFrame(self, width=350, corner_radius=12, label_text=tr("本地 AI 设置"))
         left.grid(row=0, column=0, sticky="nsew", padx=12, pady=12)
         left.grid_columnconfigure(0, weight=1)
 
@@ -115,20 +117,20 @@ class AiPage(ctk.CTkFrame):
             _r[0] += 1
             return _r[0]
 
-        ctk.CTkLabel(left, text="服务地址", font=ctk.CTkFont(size=12)).grid(
+        ctk.CTkLabel(left, text=tr("服务地址"), font=ctk.CTkFont(size=12)).grid(
             row=nxt(), column=0, sticky="w", padx=12, pady=(4, 2))
         self.base = ctk.CTkEntry(left, height=34, placeholder_text="http://localhost:11434")
         self.base.grid(row=nxt(), column=0, sticky="ew", padx=12)
         self.base.insert(0, self.cfg.get("base_url", DEFAULT_BASE))
 
-        ctk.CTkLabel(left, text="接口类型", font=ctk.CTkFont(size=12)).grid(
+        ctk.CTkLabel(left, text=tr("接口类型"), font=ctk.CTkFont(size=12)).grid(
             row=nxt(), column=0, sticky="w", padx=12, pady=(8, 2))
         self.mode_dd = ctk.CTkOptionMenu(left, values=[MODE_NATIVE, MODE_OPENAI],
                                          command=lambda _v: self._mode_changed())
         self.mode_dd.grid(row=nxt(), column=0, sticky="ew", padx=12)
         self.mode_dd.set(self.cfg.get("mode", MODE_NATIVE))
 
-        ctk.CTkLabel(left, text="模型名称（可直接手动输入）", font=ctk.CTkFont(size=12)).grid(
+        ctk.CTkLabel(left, text=tr("模型名称（可直接手动输入）"), font=ctk.CTkFont(size=12)).grid(
             row=nxt(), column=0, sticky="w", padx=12, pady=(8, 2))
         row = ctk.CTkFrame(left, fg_color="transparent")
         row.grid(row=nxt(), column=0, sticky="ew", padx=12)
@@ -139,10 +141,10 @@ class AiPage(ctk.CTkFrame):
             self.model_dd.set(self.cfg["model"])
         else:
             self.model_dd.set("qwen3-vl:8b")
-        ctk.CTkButton(row, text="刷新", width=64, command=self._refresh_models).grid(
+        ctk.CTkButton(row, text=tr("刷新"), width=64, command=self._refresh_models).grid(
             row=0, column=1, padx=(6, 0))
 
-        ctk.CTkLabel(left, text="API Key（本地服务一般留空）", font=ctk.CTkFont(size=12)).grid(
+        ctk.CTkLabel(left, text=tr("API Key（本地服务一般留空）"), font=ctk.CTkFont(size=12)).grid(
             row=nxt(), column=0, sticky="w", padx=12, pady=(8, 2))
         self.api_key = ctk.CTkEntry(left, height=34, show="●")
         self.api_key.grid(row=nxt(), column=0, sticky="ew", padx=12)
@@ -157,17 +159,17 @@ class AiPage(ctk.CTkFrame):
         self.temp_lab = ctk.CTkLabel(left, text=f"{self.temp_slider.get():.2f}", font=ctk.CTkFont(size=11))
         self.temp_lab.grid(row=nxt(), column=0, sticky="e", padx=16)
 
-        ctk.CTkLabel(left, text="上下文窗口 num_ctx（token）", font=ctk.CTkFont(size=12)).grid(
+        ctk.CTkLabel(left, text=tr("上下文窗口 num_ctx（token）"), font=ctk.CTkFont(size=12)).grid(
             row=nxt(), column=0, sticky="w", padx=12, pady=(8, 2))
         self.ctx_dd = ctk.CTkOptionMenu(left, values=NUM_CTX_CHOICES)
         self.ctx_dd.grid(row=nxt(), column=0, sticky="ew", padx=12)
         self.ctx_dd.set(str(self.cfg.get("ai_num_ctx", DEFAULT_NUM_CTX)))
-        ctk.CTkLabel(left, text="太小会导致 AI 回复空白；显存不足时选小一档",
+        ctk.CTkLabel(left, text=tr("太小会导致 AI 回复空白；显存不足时选小一档"),
                      font=ctk.CTkFont(size=11), text_color="gray45").grid(
             row=nxt(), column=0, sticky="w", padx=14, pady=(0, 2))
 
         # ---- 多模型协作（本地算 + 云端讲，可选）----
-        ctk.CTkLabel(left, text="🔗 多模型协作（本地算 + 云端讲）",
+        ctk.CTkLabel(left, text=tr("🔗 多模型协作（本地算 + 云端讲）"),
                      font=ctk.CTkFont(size=13, weight="bold")).grid(
             row=nxt(), column=0, sticky="w", padx=12, pady=(12, 4))
         self.collab_switch = ctk.CTkSwitch(left, text="开启：本地跑工具，云端出解释",
@@ -176,19 +178,19 @@ class AiPage(ctk.CTkFrame):
         if self.cfg.get("collab_on", False):
             self.collab_switch.select()
 
-        ctk.CTkLabel(left, text="云端地址（OpenAI 兼容，如 DeepSeek）", font=ctk.CTkFont(size=12)).grid(
+        ctk.CTkLabel(left, text=tr("云端地址（OpenAI 兼容，如 DeepSeek）"), font=ctk.CTkFont(size=12)).grid(
             row=nxt(), column=0, sticky="w", padx=12, pady=(8, 2))
         self.cloud_base = ctk.CTkEntry(left, height=34, placeholder_text="https://api.deepseek.com/v1")
         self.cloud_base.grid(row=nxt(), column=0, sticky="ew", padx=12)
         self.cloud_base.insert(0, self.cfg.get("cloud_base", "https://api.deepseek.com/v1"))
 
-        ctk.CTkLabel(left, text="云端 API Key（必填）", font=ctk.CTkFont(size=12)).grid(
+        ctk.CTkLabel(left, text=tr("云端 API Key（必填）"), font=ctk.CTkFont(size=12)).grid(
             row=nxt(), column=0, sticky="w", padx=12, pady=(8, 2))
         self.cloud_key = ctk.CTkEntry(left, height=34, show="●")
         self.cloud_key.grid(row=nxt(), column=0, sticky="ew", padx=12)
         self.cloud_key.insert(0, self.cfg.get("cloud_key", ""))
 
-        ctk.CTkLabel(left, text="云端模型名", font=ctk.CTkFont(size=12)).grid(
+        ctk.CTkLabel(left, text=tr("云端模型名"), font=ctk.CTkFont(size=12)).grid(
             row=nxt(), column=0, sticky="w", padx=12, pady=(8, 2))
         self.cloud_model = ctk.CTkEntry(left, height=34)
         self.cloud_model.grid(row=nxt(), column=0, sticky="ew", padx=8)
@@ -200,15 +202,15 @@ class AiPage(ctk.CTkFrame):
         if self.cfg.get("ai_tools_on", True):
             self.tools_switch.select()
 
-        ctk.CTkButton(left, text="🛠 测试连接", height=36, command=self._test_conn).grid(
+        ctk.CTkButton(left, text=tr("🛠 测试连接"), height=36, command=self._test_conn).grid(
             row=nxt(), column=0, sticky="ew", padx=8, pady=(8, 4))
-        ctk.CTkButton(left, text="🔌 测试云端", height=36, fg_color="#5b4b8a",
+        ctk.CTkButton(left, text=tr("🔌 测试云端"), height=36, fg_color="#5b4b8a",
                       command=self._test_cloud).grid(row=nxt(), column=0, sticky="ew", padx=8, pady=(8, 0))
-        ctk.CTkButton(left, text="💾 保存设置", height=36, fg_color="gray40",
+        ctk.CTkButton(left, text=tr("💾 保存设置"), height=36, fg_color="gray40",
                       command=self._save_config).grid(row=nxt(), column=0, sticky="ew", padx=12, pady=4)
-        ctk.CTkButton(left, text="💬 保存对话", height=34, fg_color="#2a7f5c",
+        ctk.CTkButton(left, text=tr("💬 保存对话"), height=34, fg_color="#2a7f5c",
                       command=self._save_chat_now).grid(row=nxt(), column=0, sticky="ew", padx=12, pady=4)
-        ctk.CTkButton(left, text="📤 导出对话", height=34, fg_color="gray40",
+        ctk.CTkButton(left, text=tr("📤 导出对话"), height=34, fg_color="gray40",
                       command=self._export_chat).grid(row=nxt(), column=0, sticky="ew", padx=12, pady=4)
 
         tip = ("使用说明：\n"
@@ -231,13 +233,13 @@ class AiPage(ctk.CTkFrame):
         head = ctk.CTkFrame(right, fg_color="transparent")
         head.grid(row=0, column=0, sticky="ew", padx=12, pady=(10, 4))
         head.grid_columnconfigure(0, weight=1)
-        ctk.CTkLabel(head, text="🤖 AI 助手", font=ctk.CTkFont(size=16, weight="bold")).grid(
+        ctk.CTkLabel(head, text=tr("🤖 AI 助手"), font=ctk.CTkFont(size=16, weight="bold")).grid(
             row=0, column=0, sticky="w")
-        ctk.CTkButton(head, text="解读当前分析", height=32, command=self._quick_interpret).grid(
+        ctk.CTkButton(head, text=tr("解读当前分析"), height=32, command=self._quick_interpret).grid(
             row=0, column=1, padx=4)
-        ctk.CTkButton(head, text="❓ 为什么", height=32, fg_color="#5b4b8a", command=self._quick_why).grid(
+        ctk.CTkButton(head, text=tr("❓ 为什么"), height=32, fg_color="#5b4b8a", command=self._quick_why).grid(
             row=0, column=2, padx=4)
-        ctk.CTkButton(head, text="清空对话", height=33, fg_color="gray40", command=self._clear_chat).grid(
+        ctk.CTkButton(head, text=tr("清空对话"), height=33, fg_color="gray40", command=self._clear_chat).grid(
             row=0, column=3)
 
         self.chat = ctk.CTkTextbox(right, font=ctk.CTkFont(size=14), wrap="word")
@@ -253,11 +255,11 @@ class AiPage(ctk.CTkFrame):
         bottom.grid(row=3, column=0, sticky="ew", padx=12, pady=(4, 12))
         bottom.grid_columnconfigure(0, weight=1)
         self.input = ctk.CTkEntry(bottom, height=42, font=ctk.CTkFont(size=14),
-                                  placeholder_text="输入你的问题，回车发送……")
+                                  placeholder_text=tr("输入你的问题，回车发送……"))
         self.input.grid(row=0, column=0, sticky="ew", padx=(0, 6))
         self.input.bind("<Return>", lambda _e: self._send())
-        ctk.CTkButton(bottom, text="发送", width=90, height=42, command=self._send).grid(row=0, column=1)
-        ctk.CTkButton(bottom, text="⏹ 停止", width=64, height=42, fg_color="gray40",
+        ctk.CTkButton(bottom, text=tr("发送"), width=90, height=42, command=self._send).grid(row=0, column=1)
+        ctk.CTkButton(bottom, text=tr("⏹ 停止"), width=64, height=42, fg_color="gray40",
                       command=self._stop_generation).grid(row=0, column=2, padx=(6, 0))
 
         self.status = ctk.CTkLabel(right, text="", font=ctk.CTkFont(size=11), text_color="gray50")

@@ -7,6 +7,10 @@
 import customtkinter as ctk
 
 from modules import app_settings as S
+from modules import ui_kit as ui
+from modules import i18n
+from modules import theme_kit
+from modules.i18n import tr
 
 THEMES = ["浅色", "深色"]
 PRECS = ["4 位", "6 位"]
@@ -14,6 +18,8 @@ ROWS = ["10 行", "20 行", "30 行", "50 行"]
 DPIS = ["80", "100", "150"]
 SCALES = ["0.9x", "1.0x", "1.1x", "1.2x"]
 PLOT_THEMES = ["出版默认", "期刊", "鲜艳", "深色"]
+ACCENTS = ui.accent_list()
+LANGS = ["简体中文", "English"]
 
 
 def _to_num(s, default=0.0):
@@ -23,9 +29,9 @@ def _to_num(s, default=0.0):
         return default
 
 
-class SettingsPage(ctk.CTkFrame):
+class SettingsPage(ui.BasePage):
     def __init__(self, master):
-        super().__init__(master, fg_color="transparent")
+        super().__init__(master, layout=False)
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(0, weight=1)
 
@@ -38,59 +44,88 @@ class SettingsPage(ctk.CTkFrame):
             ctk.CTkLabel(body, text=label, font=ctk.CTkFont(size=14, weight="bold"),
                          text_color="gray30").pack(anchor="w", pady=(10, 4))
 
-        ctk.CTkLabel(body, text="⚙️ 全局设置", font=ctk.CTkFont(size=20, weight="bold")).pack(anchor="w", pady=(4, 2))
+        ctk.CTkLabel(body, text=tr("⚙️ 全局设置"), font=ctk.CTkFont(size=20, weight="bold")).pack(anchor="w", pady=(4, 2))
 
-        hh("界面主题")
+        hh(tr("界面主题"))
         self.theme = ctk.CTkOptionMenu(body, values=THEMES, width=160)
         self.theme.pack(anchor="w", pady=(0, 4))
         self.theme.set("深色" if S.get("theme", "浅色") == "深色" else "浅色")
         self.theme.configure(command=lambda _v: self._apply_theme())
 
-        hh("结果小数位数")
+        hh(tr("主题色"))
+        self.accent = ctk.CTkOptionMenu(body, values=ACCENTS)
+        self.accent.pack(anchor="w", pady=(2, 8))
+        _cur = S.get("accent", ACCENTS[0])
+        self.accent.set(_cur if _cur in ACCENTS else ACCENTS[0])
+
+        hh(tr("界面语言"))
+        self.lang = ctk.CTkOptionMenu(body, values=LANGS, command=lambda _v: self._apply_lang())
+        self.lang.pack(anchor="w", pady=(0, 4))
+        self.lang.set(i18n.LANGUAGES.get(i18n.get_locale(), "简体中文"))
+
+        hh(tr("结果小数位数"))
         self.prec = ctk.CTkOptionMenu(body, values=PRECS, width=160)
         self.prec.pack(anchor="w", pady=(0, 4))
         prec = int(S.get("precision", 6))
         self.prec.set(f"{prec} 位" if prec in (4, 6) else "6 位")
 
-        hh("数据预览默认行数")
+        hh(tr("数据预览默认行数"))
         self.rows = ctk.CTkOptionMenu(body, values=ROWS, width=160)
         self.rows.pack(anchor="w", pady=(0, 4))
         self.rows.set(f"{int(S.get('table_rows', 10))} 行")
 
-        hh("绘图分辨率 DPI")
+        hh(tr("绘图分辨率 DPI"))
         self.dpi = ctk.CTkOptionMenu(body, values=DPIS, width=160)
         self.dpi.pack(anchor="w", pady=(0, 4))
         self.dpi.set(str(int(S.get("plot_dpi", 100))))
 
-        hh("绘图主题（模板）")
+        hh(tr("绘图主题（模板）"))
         self.plot_theme = ctk.CTkOptionMenu(body, values=PLOT_THEMES, width=160)
         self.plot_theme.pack(anchor="w", pady=(0, 4))
         t = S.get("plot_theme", "出版默认")
         self.plot_theme.set(t if t in PLOT_THEMES else "出版默认")
 
-        hh("界面字体缩放")
+        hh(tr("界面字体缩放"))
         self.scale = ctk.CTkOptionMenu(body, values=SCALES, width=160)
         self.scale.pack(anchor="w", pady=(0, 4))
         self.scale.set(f"{float(S.get('font_scale', 1.0)):.1f}x")
 
-        hh("公告与更新提醒")
-        self.announce_on = ctk.CTkCheckBox(body, text="接收公告与更新提醒（仅拉取，不上传任何数据）")
+        hh(tr("公告与更新提醒"))
+        self.announce_on = ctk.CTkCheckBox(body, text=tr("接收公告与更新提醒（仅拉取，不上传任何数据）"))
         self.announce_on.pack(anchor="w", pady=(0, 4))
         if S.get("announce_on", True):
             self.announce_on.select()
-        self.announce_url = ctk.CTkEntry(body, height=32, placeholder_text="公告地址（留空=关闭）")
+        self.announce_url = ctk.CTkEntry(body, height=32, placeholder_text=tr("公告地址（留空=关闭）"))
         self.announce_url.pack(fill="x", pady=(0, 10))
         self.announce_url.insert(0, S.get("announce_url", ""))
 
+        hh(tr("插件商店地址（留空=关闭在线商店）"))
+        self.store_url = ctk.CTkEntry(body, height=32, placeholder_text="https://.../store.json")
+        self.store_url.pack(fill="x", pady=(0, 4))
+        self.store_url.insert(0, S.get("plugin_store", ""))
+        ctk.CTkLabel(body, text=tr("插件管理与在线商店已移至独立页面「🧩 插件商店」。"),
+                     font=ctk.CTkFont(size=11), text_color="gray50").pack(anchor="w", pady=(0, 10))
+
         btns = ctk.CTkFrame(body, fg_color="transparent")
         btns.pack(fill="x", pady=(4, 8))
-        ctk.CTkButton(btns, text="💾 保存设置", height=36, command=self._save).pack(
+        ctk.CTkButton(btns, text=tr("💾 保存设置"), height=36, command=self._save).pack(
             side="left", fill="x", expand=True, padx=(0, 4))
-        ctk.CTkButton(btns, text="恢复默认", height=36, fg_color="gray40", command=self._reset).pack(
+        ctk.CTkButton(btns, text=tr("恢复默认"), height=36, fg_color="gray40", command=self._reset).pack(
             side="left", fill="x", expand=True, padx=(4, 0))
 
         self.status = ctk.CTkLabel(body, text="", font=ctk.CTkFont(size=13), text_color="#2a7f5c")
         self.status.pack(anchor="w", pady=(0, 4))
+
+    def _apply_lang(self):
+        """选择界面语言后立即切换并重建界面（无需重启）。"""
+        _loc = self.lang.get()
+        i18n.set_locale("zh" if _loc == "简体中文" else ("en" if _loc == "English" else "zh"))
+        S.set_val("locale", i18n.get_locale())
+        self.status.configure(text="语言已切换，正在刷新界面…", text_color="gray40")
+        app = getattr(self, "app", None)
+        if app is not None and hasattr(app, "apply_locale"):
+            # 延迟重建，让本回调先返回再销毁当前设置页，避免破坏回调栈
+            self.after(180, lambda: app.apply_locale())
 
     def _apply_theme(self):
         ctk.set_appearance_mode("dark" if self.theme.get() == "深色" else "light")
@@ -105,8 +140,15 @@ class SettingsPage(ctk.CTkFrame):
         S.set_val("font_scale", _to_num(self.scale.get(), 1.0))
         S.set_val("announce_on", bool(self.announce_on.get()))
         S.set_val("announce_url", self.announce_url.get().strip())
+        S.set_val("plugin_store", self.store_url.get().strip())
         self._apply_theme()
-        self.status.configure(text="设置已保存 ✓ 下次启动自动生效", text_color="#2a7f5c")
+        S.set_val("accent", self.accent.get())
+        _loc = self.lang.get()
+        i18n.set_locale("zh" if _loc == "简体中文" else ("en" if _loc == "English" else "zh"))
+        S.set_val("locale", i18n.get_locale())
+        ui.apply_font_scale()
+        theme_kit.apply_accent(self.accent.get())
+        self.status.configure(text="设置已保存 ✓", text_color="#2a7f5c")
 
     def _reset(self):
         for k, v in S.DEFAULTS.items():
@@ -121,5 +163,7 @@ class SettingsPage(ctk.CTkFrame):
             self.announce_on.select()
         self.announce_url.delete(0, "end")
         self.announce_url.insert(0, S.DEFAULTS["announce_url"])
+        self.store_url.delete(0, "end")
+        self.store_url.insert(0, S.DEFAULTS.get("plugin_store", "") or "")
         self._apply_theme()
         self.status.configure(text="已恢复默认设置 ✓", text_color="#2a7f5c")

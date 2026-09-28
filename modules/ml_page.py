@@ -11,11 +11,16 @@ matplotlib.use("TkAgg")
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
 import customtkinter as ctk
+from modules import ui_kit as ui
+from modules.i18n import tr
 
 plt.rcParams["font.sans-serif"] = ["Microsoft YaHei", "SimHei", "DejaVu Sans"]
 plt.rcParams["axes.unicode_minus"] = False
 
-OPS = ["KMeans 聚类", "决策树分类", "随机森林分类", "支持向量机 SVM", "kNN 最近邻", "PCA 降维"]
+OPS = ["KMeans 聚类", "决策树分类", "随机森林分类", "支持向量机 SVM", "kNN 最近邻", "PCA 降维",
+        "特征重要性（可解释性）", "模型对比", "交叉验证对比"]
+
+COMPARE_MODELS = ["决策树分类", "随机森林分类", "支持向量机 SVM", "kNN 最近邻", "逻辑回归", "GBDT 提升树"]
 
 SAMPLE = """1.0 2.0
 1.5 1.8
@@ -38,54 +43,53 @@ def parse_matrix(text):
     return rows
 
 
-class MlPage(ctk.CTkFrame):
+class MlPage(ui.BasePage):
     def __init__(self, master):
-        super().__init__(master, fg_color="transparent")
+        super().__init__(master)
         self.grid_columnconfigure(1, weight=1)
         self.grid_rowconfigure(0, weight=1)
 
         # ================= 左：参数 =================
-        left = ctk.CTkScrollableFrame(self, width=390, corner_radius=12, label_text="机器学习")
-        left.grid(row=0, column=0, sticky="nsew", padx=12, pady=12)
+        left = self.left
         left.grid_columnconfigure(0, weight=1)
 
-        ctk.CTkLabel(left, text="数据（每行一个样本；决策树时最后一列是类别）", font=ctk.CTkFont(size=12)).grid(
+        ctk.CTkLabel(left, text=tr("数据（每行一个样本；决策树时最后一列是类别）"), font=ctk.CTkFont(size=12)).grid(
             row=0, column=0, sticky="w", padx=14, pady=(8, 2))
         self.data = ctk.CTkTextbox(left, height=180, font=ctk.CTkFont(family="Consolas", size=12))
         self.data.grid(row=1, column=0, sticky="ew", padx=12, pady=(0, 6))
         self.data.insert("1.0", SAMPLE)
 
-        ctk.CTkLabel(left, text="操作", font=ctk.CTkFont(size=12)).grid(
+        ctk.CTkLabel(left, text=tr("操作"), font=ctk.CTkFont(size=12)).grid(
             row=2, column=0, sticky="w", padx=14, pady=(4, 2))
         self.op = ctk.CTkOptionMenu(left, values=OPS)
         self.op.grid(row=3, column=0, sticky="ew", padx=12)
         self.op.set(OPS[0])
 
-        ctk.CTkLabel(left, text="聚类数 K（KMeans 用）", font=ctk.CTkFont(size=12)).grid(
+        ctk.CTkLabel(left, text=tr("聚类数 K（KMeans 用）"), font=ctk.CTkFont(size=12)).grid(
             row=4, column=0, sticky="w", padx=14, pady=(8, 2))
         self.k = ctk.CTkEntry(left, height=32)
         self.k.grid(row=5, column=0, sticky="ew", padx=12)
         self.k.insert(0, "2")
 
-        ctk.CTkLabel(left, text="决策树最大深度（决策树用，可空=不限）", font=ctk.CTkFont(size=12)).grid(
+        ctk.CTkLabel(left, text=tr("决策树最大深度（决策树用，可空=不限）"), font=ctk.CTkFont(size=12)).grid(
             row=6, column=0, sticky="w", padx=14, pady=(8, 2))
         self.depth = ctk.CTkEntry(left, height=32)
         self.depth.grid(row=7, column=0, sticky="ew", padx=12)
         self.depth.insert(0, "")
 
-        ctk.CTkLabel(left, text="测试集比例（分类用，默认 0.2）", font=ctk.CTkFont(size=12)).grid(
+        ctk.CTkLabel(left, text=tr("测试集比例（分类用，默认 0.2）"), font=ctk.CTkFont(size=12)).grid(
             row=8, column=0, sticky="w", padx=14, pady=(8, 2))
         self.test_ratio = ctk.CTkEntry(left, height=32)
         self.test_ratio.grid(row=9, column=0, sticky="ew", padx=12)
         self.test_ratio.insert(0, "0.2")
 
-        ctk.CTkLabel(left, text="交叉验证折数 CV（0=关闭，分类用）", font=ctk.CTkFont(size=12)).grid(
+        ctk.CTkLabel(left, text=tr("交叉验证折数 CV（0=关闭，分类用）"), font=ctk.CTkFont(size=12)).grid(
             row=10, column=0, sticky="w", padx=14, pady=(8, 2))
         self.cv_folds = ctk.CTkEntry(left, height=32)
         self.cv_folds.grid(row=11, column=0, sticky="ew", padx=12)
         self.cv_folds.insert(0, "5")
 
-        ctk.CTkButton(left, text="⚡ 训 练", height=42, command=self._run).grid(
+        ctk.CTkButton(left, text=tr("⚡ 训 练"), height=42, command=self._run).grid(
             row=12, column=0, sticky="ew", padx=12, pady=(10, 2))
 
         tip = ("说明：\n"
@@ -98,30 +102,25 @@ class MlPage(ctk.CTkFrame):
                      text_color="gray45", anchor="w", wraplength=360).grid(
             row=13, column=0, sticky="w", padx=14, pady=(4, 12))
 
+        # 可解释模型（特征重要性/模型对比/交叉验证用）
+        ctk.CTkLabel(left, text=tr("可解释模型（特征重要性/对比/交叉验证用）"), font=ctk.CTkFont(size=12)).grid(
+            row=14, column=0, sticky="w", padx=14, pady=(4, 1))
+        self.model_dd = ctk.CTkOptionMenu(left, values=COMPARE_MODELS)
+        self.model_dd.grid(row=15, column=0, sticky="ew", padx=14)
+        self.model_dd.set("随机森林分类")
+
         # ================= 右：结果 + 画布 =================
-        right = ctk.CTkFrame(self, corner_radius=12)
-        right.grid(row=0, column=1, sticky="nsew", padx=(0, 12), pady=12)
+        right = self.right
         right.grid_columnconfigure(0, weight=1)
         right.grid_rowconfigure(2, weight=1)
 
-        ctk.CTkLabel(right, text="训练结果", font=ctk.CTkFont(size=14, weight="bold")).grid(
+        ctk.CTkLabel(right, text=tr("训练结果"), font=ctk.CTkFont(size=14, weight="bold")).grid(
             row=0, column=0, sticky="w", padx=16, pady=(12, 4))
         self.out = ctk.CTkTextbox(right, font=ctk.CTkFont(family="Consolas", size=13), height=300)
         self.out.grid(row=1, column=0, sticky="nsew", padx=16, pady=(0, 4))
-
-        box = ctk.CTkFrame(right, fg_color="transparent")
-        box.grid(row=2, column=0, sticky="nsew", padx=16, pady=(4, 4))
-        box.grid_rowconfigure(0, weight=1)
-        box.grid_columnconfigure(0, weight=1)
-        self.figure = plt.Figure(figsize=(7, 58), dpi=100)
-        self.ax = self.figure.add_subplot(111)
-        self.canvas = FigureCanvasTkAgg(self.figure, master=box)
-        self.canvas.get_tk_widget().pack(side="top", fill="both", expand=1)
-        toolbar = NavigationToolbar2Tk(self.canvas, box)
-        toolbar.update()
-        toolbar.pack(side="bottom", fill="x")
+        box, self.figure, self.canvas, _tb = self.show_plot()
+        self.ax = self.figure.gca()
         self.ax.set_title("机器学习图形")
-        self.canvas.draw()
 
     def _msg(self, s):
         self.out.configure(state="normal")
@@ -153,6 +152,12 @@ class MlPage(ctk.CTkFrame):
                 self._classify(self.data.get("1.0", "end"), "kNN 最近邻")
             elif op == OPS[5]:
                 self._pca(self.data.get("1.0", "end"))
+            elif op == OPS[6]:
+                self._feature_importance(self.data.get("1.0", "end"))
+            elif op == OPS[7]:
+                self._model_compare(self.data.get("1.0", "end"))
+            elif op == OPS[8]:
+                self._cv_compare(self.data.get("1.0", "end"))
         except Exception as e:
             self._msg(f"出错：{e}")
         self.canvas.draw()
@@ -163,7 +168,7 @@ class MlPage(ctk.CTkFrame):
         from sklearn.cluster import KMeans
         k = max(2, int(float(self.k.get() or 2)))
         k = min(k, mat.shape[0])
-        km = KMeans(n_clusters=k, n_init=10, random_state=0).fit(mat)
+        km = KMeans(n_clusters=k, n_init=5, random_state=0).fit(mat)
         labels = km.labels_
         self.figure.clear()
         self.ax = self.figure.add_subplot(111)
@@ -214,7 +219,7 @@ class MlPage(ctk.CTkFrame):
             model = DecisionTreeClassifier(max_depth=depth, random_state=0)
         elif name == "随机森林分类":
             from sklearn.ensemble import RandomForestClassifier
-            model = RandomForestClassifier(n_estimators=200, max_depth=depth, random_state=0)
+            model = RandomForestClassifier(n_estimators=100, max_depth=depth, random_state=0, n_jobs=-1)
         elif name == "支持向量机 SVM":
             from sklearn.svm import SVC
             model = SVC(kernel="rbf", probability=True, random_state=0)
@@ -232,7 +237,7 @@ class MlPage(ctk.CTkFrame):
         cvf = int(float(self.cv_folds.get() or 0))
         if cvf and X.shape[0] > max(cvf, 6):
             try:
-                scores = cross_val_score(model, X, y, cv=cvf, scoring="accuracy")
+                scores = cross_val_score(model, X, y, cv=cvf, scoring="accuracy", n_jobs=-1)
                 self._msg(f"交叉验证（{cvf} 折）：acc={scores.mean():.1%} ± {scores.std():.1%}")
             except Exception as e:
                 self._msg(f"交叉验证失败：{e}")
@@ -306,3 +311,164 @@ class MlPage(ctk.CTkFrame):
         self.ax.set_ylabel("主成分 2" if Z.shape[1] > 1 else "主成分 1")
         self.ax.grid(True)
         self._msg(f"主成分 1 解释方差 {evr[0]:.1%}，主成分 2 解释 {evr[1] if len(evr) > 1 else 0:.1%}，合计 {evr.sum():.1%}")
+    # ================= v1.9.0：可解释机器学习 =================
+    def _parse_xy(self, text):
+        """解析特征(除最后一列)与标签(最后一列)。"""
+        feats, labels = [], []
+        for line in text.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            toks = line.replace(",", " ").split()
+            if len(toks) < 2:
+                continue
+            feats.append([float(x) for x in toks[:-1]])
+            labels.append(toks[-1])
+        if len(feats) < 1450:
+            raise ValueError("样本太少（至少 6 行）。")
+        X = np.array(feats)
+        y = np.array(labels)
+        if len(set(y)) < 2:
+            raise ValueError("标签列至少需要 2 个类别。")
+        return X, y
+
+    def _depth_opt(self):
+        try:
+            return int(float(self.depth.get())) if self.depth.get().strip() else None
+        except Exception:
+            return None
+
+    def _k_opt(self):
+        try:
+            return float(self.k.get()) if self.k.get().strip() else 5
+        except Exception:
+            return 511
+
+    def _make_model(self, name, depth=None, k=None):
+        """按名称构造可训练的分类器，返回 (model, 短名)。"""
+        if name == "决策树分类":
+            from sklearn.tree import DecisionTreeClassifier
+            return DecisionTreeClassifier(max_depth=depth, random_state=0), "决策树"
+        if name == "随机森林分类":
+            from sklearn.ensemble import RandomForestClassifier
+            return RandomForestClassifier(n_estimators=100, max_depth=depth, random_state=0, n_jobs=-1), "随机森林"
+        if name == "支持向量机 SVM":
+            from sklearn.svm import SVC
+            return SVC(kernel="rbf", probability=True, random_state=0), "SVM"
+        if name == "kNN 最近邻":
+            from sklearn.neighbors import KNeighborsClassifier
+            return KNeighborsClassifier(n_neighbors=max(1, int(k or 5))), "kNN"
+        if name == "逻辑回归":
+            from sklearn.linear_model import LogisticRegression
+            return LogisticRegression(max_iter=1000, random_state=0), "逻辑回归"
+        if name == "GBDT 提升树":
+            from sklearn.ensemble import GradientBoostingClassifier
+            return GradientBoostingClassifier(random_state=0), "GBDT"
+        raise ValueError("未知模型：" + name)
+
+    def _feature_importance(self, text):
+        from sklearn.inspection import permutation_importance
+        X, y = self._parse_xy(text)
+        name = self.model_dd.get()
+        model, short = self._make_model(name, self._depth_opt(), self._k_opt())
+        model.fit(X, y)
+        if hasattr(model, "feature_importances_"):
+            importances = model.feature_importances_
+            std = None
+            method = "树模型自带重要性（不纯度增益）"
+        else:
+            perm = permutation_importance(model, X, y, n_repeats=15, random_state=0,
+                                          scoring="accuracy", n_jobs=-1)
+            importances = perm.importances_mean
+            std = perm.importances_std
+            method = "排列重要性（Permutation，打乱特征看精度下降）"
+        order = np.argsort(-importances)
+        self._msg(f"模型：{short}；特征数：{X.shape[1]}；方法：{method}")
+        for i in order:
+            if std is not None:
+                self._msg(f"  特征 {i + 1}：{importances[i]:.4f} ± {std[i]:.4f}")
+            else:
+                self._msg(f"  特征 {i + 1}：{importances[i]:.4f}")
+        self.figure.clear()
+        self.ax = self.figure.add_subplot(111)
+        names = [f"F{i + 1}" for i in order]
+        self.ax.barh(names, importances[order], color="steelblue")
+        if std is not None:
+            self.ax.errorbar(importances[order], range(len(order)), xerr=std[order],
+                             fmt="none", ecolor="k", capsize=2)
+        self.ax.set_xlabel("特征重要性")
+        self.ax.set_title(f"{short} 特征重要性（可解释性）")
+        self.ax.grid(True, axis="x", alpha=0.4)
+        self.ax.invert_yaxis()
+
+    def _model_compare(self, text):
+        from sklearn.model_selection import train_test_split
+        from sklearn.metrics import roc_auc_score
+        X, y = self._parse_xy(text)
+        ratio = float(self.test_ratio.get() or 0.2)
+        ratio = max(0.1, min(0.4, ratio))
+        Xtr, Xte, ytr, yte = train_test_split(X, y, test_size=ratio, random_state=0)
+        classes = sorted(set(y))
+        rows = []
+        for name in COMPARE_MODELS:
+            try:
+                model, short = self._make_model(name, self._depth_opt(), self._k_opt())
+                model.fit(Xtr, ytr)
+                acc = float(model.score(Xte, yte))
+                auc = float("nan")
+                if len(classes) == 2 and hasattr(model, "predict_proba"):
+                    pos = classes[1]
+                    proba = model.predict_proba(Xte)
+                    auc = float(roc_auc_score((yte == pos), proba[:, list(classes).index(pos)]))
+                rows.append((short, acc, auc, name))
+            except Exception as e:
+                rows.append((short, float("nan"), float("nan"), name))
+        self._msg("模型对比（同一训练/测试切分）：")
+        for short, acc, auc, name in rows:
+            acc_t = f"{acc:.1%}" if not np.isnan(acc) else "失败"
+            auc_t = f"AUC={auc:.3f}" if not np.isnan(auc) else "AUC=—"
+            self._msg(f"  {short}：acc={acc_t}，{auc_t}")
+        best = max((r for r in rows if not np.isnan(r[1])), key=lambda r: r[1], default=None)
+        if best:
+            self._msg(f"\n最佳：{best[0]}（acc={best[1]:.1%}）")
+        self.figure.clear()
+        self.ax = self.figure.add_subplot(111)
+        names = [r[0] for r in rows]
+        accs = [r[1] for r in rows]
+        self.ax.bar(names, accs, color=["#4C72B0" if not np.isnan(a) else "#cccccc" for a in accs])
+        for i, a in enumerate(accs):
+            if not np.isnan(a):
+                self.ax.text(i, a + 0.005, f"{a:.2f}", ha="center", fontsize=7)
+        self.ax.set_ylim(0, 1.05)
+        self.ax.set_ylabel("测试集准确率")
+        self.ax.set_title("各模型准确率对比")
+        self.ax.grid(True, axis="y", alpha=0.3)
+
+    def _cv_compare(self, text):
+        from sklearn.model_selection import cross_val_score, StratifiedKFold
+        X, y = self._parse_xy(text)
+        depth = self._depth_opt()
+        fold = int(float(self.cv_folds.get() or 5))
+        fold = max(2, min(fold, max(2, X.shape[0] // 2)))
+        rows = []
+        for name in COMPARE_MODELS:
+            try:
+                model, short = self._make_model(name, depth, self._k_opt())
+                cv = StratifiedKFold(n_splits=fold, shuffle=True, random_state=0)
+                sc = cross_val_score(model, X, y, cv=cv, scoring="accuracy", n_jobs=-1)
+                rows.append((short, float(sc.mean()), float(sc.std()), sc))
+            except Exception:
+                pass
+        self._msg(f"交叉验证对比（{fold} 折，Stratified）：")
+        for short, mean, sd, sc in rows:
+            self._msg(f"  {short}：acc={mean:.1%} ± {sd:.1%}")
+        self.figure.clear()
+        self.ax = self.figure.add_subplot(111)
+        names = [r[0] for r in rows]
+        data = [r[3] for r in rows]
+        bp = self.ax.boxplot(data, labels=names, patch_artist=True)
+        for patch in bp["boxes"]:
+            patch.set_facecolor("#9ecae1")
+        self.ax.set_ylabel("交叉验证准确率")
+        self.ax.set_title(f"各模型 {fold} 折交叉验证准确率分布")
+        self.ax.grid(True, axis="y", alpha=0.3)

@@ -19,6 +19,8 @@ matplotlib.use("TkAgg")
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
 from PIL import Image
+from modules import ui_kit as ui
+from modules.i18n import tr
 
 plt.rcParams["font.sans-serif"] = ["Microsoft YaHei", "SimHei", "DejaVu Sans"]
 plt.rcParams["axes.unicode_minus"] = False
@@ -66,9 +68,9 @@ def _split_response(text):
     return out
 
 
-class OcrPage(ctk.CTkFrame):
+class OcrPage(ui.BasePage):
     def __init__(self, master):
-        super().__init__(master, fg_color="transparent")
+        super().__init__(master)
         self.grid_columnconfigure(1, weight=1)
         self.grid_rowconfigure(0, weight=1)
         self.image = None
@@ -84,8 +86,7 @@ class OcrPage(ctk.CTkFrame):
         self.cfg = self._load_config()
 
         # ================= 左：图片与设置 =================
-        left = ctk.CTkScrollableFrame(self, width=390, corner_radius=12, label_text="题目图片")
-        left.grid(row=0, column=0, sticky="nsew", padx=12, pady=12)
+        left = self.left
         left.grid_columnconfigure(0, weight=1)
 
         btn_row = ctk.CTkFrame(left, fg_color="transparent")
@@ -93,33 +94,33 @@ class OcrPage(ctk.CTkFrame):
         btn_row.grid_columnconfigure(0, weight=1)
         btn_row.grid_columnconfigure(1, weight=1)
         btn_row.grid_columnconfigure(2, weight=1)
-        ctk.CTkButton(btn_row, text="📁 选择图片", height=36, command=self._pick).grid(
+        ctk.CTkButton(btn_row, text=tr("📁 选择图片"), height=36, command=self._pick).grid(
             row=0, column=0, sticky="ew", padx=(0, 4))
-        ctk.CTkButton(btn_row, text="📋 粘贴截图", height=36, fg_color="gray40",
+        ctk.CTkButton(btn_row, text=tr("📋 粘贴截图"), height=36, fg_color="gray40",
                       command=self._paste).grid(row=0, column=1, sticky="ew", padx=(4, 0))
-        ctk.CTkButton(btn_row, text="📸 拍照/截图", height=36, fg_color="gray40",
+        ctk.CTkButton(btn_row, text=tr("📸 拍照/截图"), height=36, fg_color="gray40",
                       command=self._camera).grid(row=0, column=2, sticky="ew", padx=(4, 0))
 
-        self.img_lab = ctk.CTkLabel(left, text="尚未选择图片", font=ctk.CTkFont(size=13),
+        self.img_lab = ctk.CTkLabel(left, text=tr("尚未选择图片"), font=ctk.CTkFont(size=13),
                                     text_color="gray50", anchor="n")
         self.img_lab.grid(row=1, column=0, padx=12, pady=(4, 8), sticky="n")
 
-        ctk.CTkLabel(left, text="本地 AI 服务地址（自动读取）", font=ctk.CTkFont(size=12)).grid(
+        ctk.CTkLabel(left, text=tr("本地 AI 服务地址（自动读取）"), font=ctk.CTkFont(size=12)).grid(
             row=2, column=0, sticky="w", padx=4, pady=(4, 2))
         self.base = ctk.CTkEntry(left, height=32)
         self.base.grid(row=3, column=0, sticky="ew", padx=12)
         self.base.insert(0, self.cfg.get("base_url", "http://localhost:11434"))
 
-        ctk.CTkLabel(left, text="模型名称（自动读取，可改）", font=ctk.CTkFont(size=12)).grid(
+        ctk.CTkLabel(left, text=tr("模型名称（自动读取，可改）"), font=ctk.CTkFont(size=12)).grid(
             row=4, column=0, sticky="w", padx=12, pady=(8, 2))
         self.model = ctk.CTkEntry(left, height=32)
         self.model.grid(row=5, column=0, sticky="ew", padx=12)
         self.model.insert(0, self.cfg.get("model", "qwen3-vl:8b"))
 
-        ctk.CTkButton(left, text="🔍 识别并解析", height=42, command=self._run).grid(
+        ctk.CTkButton(left, text=tr("🔍 识别并解析"), height=42, command=self._run).grid(
             row=6, column=0, sticky="ew", padx=12, pady=(12, 4))
 
-        ctk.CTkLabel(left, text="解析出的表达式（可编辑修正）", font=ctk.CTkFont(size=12)).grid(
+        ctk.CTkLabel(left, text=tr("解析出的表达式（可编辑修正）"), font=ctk.CTkFont(size=12)).grid(
             row=7, column=0, sticky="w", padx=14, pady=(10, 2))
         self.expr = ctk.CTkTextbox(left, height=64, font=ctk.CTkFont(family="Consolas", size=13))
         self.expr.grid(row=8, column=0, sticky="ew", padx=12, pady=(2, 6))
@@ -142,15 +143,15 @@ class OcrPage(ctk.CTkFrame):
             row=10, column=0, sticky="w", padx=14, pady=(6, 12))
 
         # ---- 批量识别 / 错题本 ----
-        ctk.CTkLabel(left, text="🖼 批量识别", font=ctk.CTkFont(size=13, weight="bold")).grid(
+        ctk.CTkLabel(left, text=tr("🖼 批量识别"), font=ctk.CTkFont(size=13, weight="bold")).grid(
             row=11, column=0, sticky="w", padx=14, pady=(10, 2))
         proto_row = ctk.CTkFrame(left, fg_color="transparent")
         proto_row.grid(row=12, column=0, sticky="ew", padx=12)
         proto_row.grid_columnconfigure(0, weight=1)
         proto_row.grid_columnconfigure(1, weight=1)
-        ctk.CTkButton(proto_row, text="📂 批量导入", height=34, command=self._pick_multi).grid(
+        ctk.CTkButton(proto_row, text=tr("📂 批量导入"), height=34, command=self._pick_multi).grid(
             row=0, column=0, sticky="ew", padx=(0, 4))
-        ctk.CTkButton(proto_row, text="🔍 识别全部", height=34, fg_color="#2a7f5c",
+        ctk.CTkButton(proto_row, text=tr("🔍 识别全部"), height=34, fg_color="#2a7f5c",
                       command=self._run_batch).grid(row=0, column=1, sticky="ew", padx=(4, 0))
         self.batch_list = ctk.CTkScrollableFrame(left, height=110, corner_radius=6)
         self.batch_list.grid(row=13, column=0, sticky="ew", padx=12, pady=(4, 0))
@@ -159,37 +160,25 @@ class OcrPage(ctk.CTkFrame):
         wrong_row.grid(row=14, column=0, sticky="ew", padx=12, pady=(8, 2))
         wrong_row.grid_columnconfigure(0, weight=1)
         wrong_row.grid_columnconfigure(1, weight=1)
-        ctk.CTkButton(wrong_row, text="⭐ 加入错题本", height=34, command=self._add_wrong).grid(
+        ctk.CTkButton(wrong_row, text=tr("⭐ 加入错题本"), height=34, command=self._add_wrong).grid(
             row=0, column=0, sticky="ew", padx=(0, 4))
-        ctk.CTkButton(wrong_row, text="📕 打开错题本", height=34, fg_color="#5b4b8a",
+        ctk.CTkButton(wrong_row, text=tr("📕 打开错题本"), height=34, fg_color="#5b4b8a",
                       command=self._open_wrongbook).grid(row=0, column=1, sticky="ew", padx=(4, 0))
 
         # ================= 右：结果 =================
-        right = ctk.CTkFrame(self, corner_radius=12)
-        right.grid(row=0, column=1, sticky="nsew", padx=(0, 12), pady=12)
+        right = self.right
         right.grid_columnconfigure(0, weight=1)
         right.grid_rowconfigure(1, weight=1)
 
-        ctk.CTkLabel(right, text="识别结果", font=ctk.CTkFont(size=14, weight="bold")).grid(
+        ctk.CTkLabel(right, text=tr("识别结果"), font=ctk.CTkFont(size=14, weight="bold")).grid(
             row=0, column=0, sticky="w", padx=16, pady=(12, 4))
         self.out = ctk.CTkTextbox(right, font=ctk.CTkFont(family="Consolas", size=13))
         self.out.grid(row=1, column=0, sticky="nsew", padx=16, pady=(0, 4))
-
-        box = ctk.CTkFrame(right, fg_color="transparent")
-        box.grid(row=2, column=0, sticky="nsew", padx=16, pady=(4, 4))
-        box.grid_rowconfigure(0, weight=1)
-        box.grid_columnconfigure(0, weight=1)
-        self.figure = plt.Figure(figsize=(7, 4.6), dpi=100)
-        self.ax = self.figure.add_subplot(111)
-        self.canvas = FigureCanvasTkAgg(self.figure, master=box)
-        self.canvas.get_tk_widget().pack(side="top", fill="both", expand=1)
-        toolbar = NavigationToolbar2Tk(self.canvas, box)
-        toolbar.update()
-        toolbar.pack(side="bottom", fill="x")
+        box, self.figure, self.canvas, _tb = self.show_plot()
+        self.ax = self.figure.gca()
         self.ax.set_title("函数图形预览")
         self.ax.set_xlabel("x")
         self.ax.set_ylabel("y")
-        self.canvas.draw()
 
     def _load_config(self):
         try:
@@ -405,13 +394,13 @@ class OcrPage(ctk.CTkFrame):
         win.geometry("440x400")
         win.grid_columnconfigure(0, weight=1)
         win.grid_rowconfigure(0, weight=1)
-        lab = ctk.CTkLabel(win, text="连接相机中…", font=ctk.CTkFont(size=14))
+        lab = ctk.CTkLabel(win, text=tr("连接相机中…"), font=ctk.CTkFont(size=14))
         lab.grid(row=0, column=0, sticky="nsew")
         btnrow = ctk.CTkFrame(win, fg_color="transparent")
         btnrow.grid(row=1, column=0, sticky="ew", padx=12, pady=8)
-        ctk.CTkButton(btnrow, text="📷 拍下", width=140, height=42,
+        ctk.CTkButton(btnrow, text=tr("📷 拍下"), width=140, height=42,
                       command=self._cam_capture).pack(side="left", expand=True, padx=4)
-        ctk.CTkButton(btnrow, text="取消", width=140, height=42, fg_color="gray40",
+        ctk.CTkButton(btnrow, text=tr("取消"), width=140, height=42, fg_color="gray40",
                       command=self._cam_close).pack(side="left", expand=True, padx=4)
         self._cam_win = win
         self._cam_lab = lab
@@ -546,7 +535,7 @@ class OcrPage(ctk.CTkFrame):
         win.attributes("-topmost", True)
         win.grid_columnconfigure(0, weight=1)
         win.grid_rowconfigure(1, weight=1)
-        ctk.CTkLabel(win, text="📕 错题本", font=ctk.CTkFont(size=16, weight="bold")).grid(
+        ctk.CTkLabel(win, text=tr("📕 错题本"), font=ctk.CTkFont(size=16, weight="bold")).grid(
             row=0, column=0, padx=12, pady=(12, 4), sticky="w")
         tb = ctk.CTkTextbox(win, font=ctk.CTkFont(family="Consolas", size=13))
         tb.grid(row=1, column=0, sticky="nsew", padx=12, pady=(0, 4))
@@ -557,7 +546,7 @@ class OcrPage(ctk.CTkFrame):
                               f"  表达式：{e.get('表达式', '')}\n"
                               f"  备注：{e.get('备注', '')}\n\n")
         tb.configure(state="disabled")
-        ctk.CTkButton(win, text="清空错题本", fg_color="gray40",
+        ctk.CTkButton(win, text=tr("清空错题本"), fg_color="gray40",
                       command=lambda: self._clear_wrongbook(tb)).grid(
             row=2, column=0, padx=12, pady=(0, 12))
 

@@ -529,26 +529,33 @@ def posthoc_test(df, value_col, group_col, method="Tukey", alpha=0.05):
         method_name = "LSD（最小显著差）" if method == "LSD" else "Bonferroni 校正"
         u_groups = [g for g in data[group_col].unique() if not pd.isna(g)]
         pairs = list(combinations(u_groups, 2))
-        rows = []
-        for g1, g2 in pairs:
-            x1 = data.loc[data[group_col] == g1, value_col].astype(float)
-            x2 = data.loc[data[group_col] == g2, value_col].astype(float)
-            n1, n2 = len(x1), len(x2)
-            if n1 < 2 or n2 < 2:
-                continue
-            t_stat, p_raw = stats.ttest_ind(x1, x2)
-            p_val = min(1.0, p_raw * len(pairs)) if method == "Bonferroni" else p_raw
-            # 合并方差的两样本均值差置信区间
-            v1, v2 = x1.var(ddof=1), x2.var(ddof=1)
-            sp2 = ((n1 - 1) * v1 + (n2 - 1) * v2) / (n1 + n2 - 2)
-            se = np.sqrt(sp2 * (1 / n1 + 1 / n2))
-            t_crit = stats.t.ppf(1 - alpha / 2, n1 + n2 - 2)
-            mdiff = float(x1.mean() - x2.mean())
+        # 向量化：先算各组 n/均值/方差，再对 K 选 2 对做合并方差 t 检验（替代逐对调 ttest_ind）
+        Kgrp = len(u_groups)
+        means = np.zeros(Kgrp); vars_ = np.zeros(Kgrp); ns = np.zeros(Kgrp, dtype=int)
+        for gi, g in enumerate(u_groups):
+            x = data.loc[data[group_col] == g, value_col].astype(float)
+            means[gi] = x.mean(); vars_[gi] = x.var(ddof=1); ns[gi] = len(x)
+        pair_idx = np.array(list(combinations(range(Kgrp), 2)))
+        ii, jj = pair_idx[:,0], pair_idx[:,1]
+        ni, nj = ns[ii].astype(float), ns[jj].astype(float)
+        mi, mj = means[ii], means[jj]
+        vi, vj = vars_[ii], vars_[jj]
+        sp2 = ((ni-1)*vi + (nj-1)*vj) / (ni+nj-2)
+        se = np.sqrt(sp2 * (1.0/ni + 1.0/nj))
+        mdiff = mi - mj
+        t_stat = mdiff / se
+        dfree = ni + nj - 2
+        p_raw = 2 * stats.t.sf(np.abs(t_stat), dfree)
+        p_val = np.minimum(1.0, p_raw*len(pairs)) if method == "Bonferroni" else p_raw
+        t_crit = stats.t.ppf(1 - alpha/2, dfree)
+        for idx in range(len(pair_idx)):
+            g1, g2 = u_groups[ii[idx]], u_groups[jj[idx]]
             rows.append({
                 "组1": str(g1), "组2": str(g2),
-                "均值差": mdiff, "p 值": float(p_val),
-                "95%CI低": mdiff - t_crit * se, "95%CI高": mdiff + t_crit * se,
-                "显著": "是" if p_val < alpha else "否",
+                "均值差": float(mdiff[idx]), "p 值": float(p_val[idx]),
+                "95%CI低": float(mdiff[idx] - t_crit[idx]*se[idx]),
+                "95%CI高": float(mdiff[idx] + t_crit[idx]*se[idx]),
+                "显著": "是" if p_val[idx] < alpha else "否",
             })
     else:
         raise ValueError(f"未知事后比较方法：{method}，可选 Tukey / LSD / Bonferroni。")
@@ -811,9 +818,15 @@ def multiple_linear_regression(df, y_col, x_cols, alpha=0.05):
         "95%CI低": ci[0].values,
         "95%CI高": ci[1].values,
     })
-    vif_rows = []
-    for i, c in enumerate(x_cols):
-        vif_rows.append({"自变量": c, "VIF": float(variance_inflation_factor(X.values, i + 1))})
+    # 高效 VIF：VIF_j = (R^-1)_jj，R 为自变量相关阵，一次矩阵求逆 O(k^3) 替代逐变量重回归 O(k n k^2)
+    _xp = dat[x_cols].values
+    try:
+        _R = np.corrcoef(_xp.T)
+        _Rinv = np.linalg.inv(_R)
+        _vif = np.diag(_Rinv)
+    except np.linalg.LinAlgError:
+        _vif = np.array([variance_inflation_factor(X.values, i + 1) for i in range(k)])
+    vif_rows = [{"自变量": c, "VIF": float(_vif[i])} for i, c in enumerate(x_cols)]
     vif_df = pd.DataFrame(vif_rows)
     dw = float(durbin_watson(model.resid))
     r2, adj_r2 = float(model.rsquared), float(model.rsquared_adj)
@@ -886,3 +899,102 @@ def cronbach_alpha(df, cols):
         "删除题项后 α": del_df,
         "结论": conclusion,
     }
+
+# ======================================================================
+# v1.9.0 新增：统计深化（偏相关 / 相关系数置信区间 / Glass's delta）
+# ======================================================================
+
+def partial_correlation(df, x_col, y_col, controls=None, method="pearson", alpha=0.05):
+    """偏相关：在控制一组变量后，x 与 y 的线性/秩相关关系。
+
+    method: "pearson"（线性偏相关，默认）或 "spearman"（秩偏相关）。
+    实现：把 x、y 分别对控制变量做多元线性回归取残差，再求两残差的相关。
+    显著性用 t = r·sqrt((n-k-2)/(1-r²))，自由度 = n-k-2。
+    """
+    import statsmodels.api as sm
+    from scipy.stats import rankdata
+    controls = list(controls or [])
+    cols = [x_col, y_col] + controls
+    d = df[cols].apply(pd.to_numeric, errors="coerce").dropna()
+    n = len(d)
+    k = len(controls)
+    if n <= k + 2:
+        raise ValueError(f"样本量不足：需要至少 k+3 = {k + 3} 个观测，当前 {n}。")
+    if method.lower().startswith("sp"):
+        for c in cols:
+            d[c] = rankdata(d[c])
+    # 残差化：x、y 分别对（控制变量 + 常数项）回归
+    Xctrl = d[controls].astype(float) if controls else pd.DataFrame(index=d.index)
+    Xmat = sm.add_constant(Xctrl)
+    rx = d[x_col].astype(float) - sm.OLS(d[x_col].astype(float), Xmat).fit().fittedvalues
+    ry = d[y_col].astype(float) - sm.OLS(d[y_col].astype(float), Xmat).fit().fittedvalues
+    r, p = stats.pearsonr(rx, ry)
+    # 偏相关 t 检验
+    denom = np.sqrt(max(1 - r ** 2, 0.0))
+    if denom > 1e-12:
+        t = r * np.sqrt(n - k - 2) / denom
+        p_t = 2 * (1 - stats.t.cdf(abs(t), n - k - 2))
+    else:
+        # |r| 接近 1 时 t 趋于无穷，p 视为 0
+        t = float(np.sign(r) * np.inf) if r else np.nan
+        p_t = 0.0
+    ad = abs(r)
+    strength = ("极强" if ad >= 0.8 else "强" if ad >= 0.6
+                else "中等" if ad >= 0.4 else "弱" if ad >= 0.2 else "极弱")
+    concl = (f"控制 {'、'.join(controls) if controls else '无变量'} 后，"
+             f"偏相关显著（r={r:.4f}, p={format_p(p_t)}），{strength}相关。"
+             if p_t < alpha else
+             f"控制 {'、'.join(controls) if controls else '无变量'} 后，"
+             f"偏相关不显著（r={r:.4f}, p={format_p(p_t)}），{strength}相关。")
+    return {
+        "方法": "Pearson 偏相关" if not method.lower().startswith("sp") else "Spearman 偏相关",
+        "X": x_col, "Y": y_col, "控制变量": controls,
+        "样本量": n, "自由度": n - k - 2,
+        "偏相关系数 r": float(r), "p 值": float(p_t), "强度": strength,
+        "结论": concl,
+    }
+
+
+def correlation_ci(r, n, alpha=0.05):
+    """相关系数的置信区间（Fisher z 变换）。返回 (lo, hi)。"""
+    if n < 4:
+        raise ValueError("求相关系数置信区间至少需要 4 个样本。")
+    r = float(r)
+    r = np.clip(r, -1.0 + 1e-9, 1.0 - 1e-9)
+    z = np.arctanh(r)
+    se = 1.0 / np.sqrt(n - 3)
+    zc = stats.norm.ppf(1 - alpha / 2)
+    z_lo, z_hi = z - zc * se, z + zc * se
+    return (float(np.tanh(z_lo)), float(np.tanh(z_hi)))
+
+
+def glass_delta(gs1, gs2, alpha=0.05):
+    """Glass's delta：用对照组的标准差衡量两组均值差异。
+
+    gs1 = 实验组，gs2 = 对照组（用其标准差作基线）。
+    """
+    g1 = np.asarray(gs1, dtype=float)
+    g2 = np.asarray(gs2, dtype=float)
+    if len(g1) < 2 or len(g2) < 2:
+        raise ValueError("每组至少需要 2 个观测值。")
+    delta = (g1.mean() - g2.mean()) / g2.std(ddof=1) if g2.std(ddof=1) != 0 else np.nan
+    ad = abs(delta)
+    label = ("大" if ad >= 0.8 else "中" if ad >= 0.5
+             else "小" if ad >= 0.2 else "微小" if np.isfinite(delta) else "—")
+    return {"delta": float(delta), "label": label,
+            "mean1": float(g1.mean()), "mean2": float(g2.mean()),
+            "sd2": float(g2.std(ddof=1)), "n1": len(g1), "n2": len(g2)}
+
+
+# 让部分旧调用也能拿到 r 的 CI（供报告/LaTeX 补充）
+def add_correlation_ci(result, n=None, alpha=0.05):
+    """给 correlation_test 的结果补充 r 的 95% 置信区间（就地修改并返回）。"""
+    r = result.get("相关系数 r")
+    if r is None or np.isnan(r):
+        return result
+    nn = n or result.get("样本量")
+    try:
+        result["r_ci"] = correlation_ci(r, nn, alpha)
+    except Exception:
+        result["r_ci"] = (np.nan, np.nan)
+    return result

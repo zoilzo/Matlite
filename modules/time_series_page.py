@@ -10,6 +10,8 @@ matplotlib.use("TkAgg")
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
 import customtkinter as ctk
+from modules import ui_kit as ui
+from modules.i18n import tr
 
 plt.rcParams["font.sans-serif"] = ["Microsoft YaHei", "SimHei", "DejaVu Sans"]
 plt.rcParams["axes.unicode_minus"] = False
@@ -31,54 +33,53 @@ def _sample_series():
     return " ".join(f"{v:.1f}" for v in y)
 
 
-class TimeSeriesPage(ctk.CTkFrame):
+class TimeSeriesPage(ui.BasePage):
     def __init__(self, master):
-        super().__init__(master, fg_color="transparent")
+        super().__init__(master)
         self.grid_columnconfigure(1, weight=1)
         self.grid_rowconfigure(0, weight=1)
 
         # ================= 左：参数 =================
-        left = ctk.CTkScrollableFrame(self, width=390, corner_radius=12, label_text="时间序列")
-        left.grid(row=0, column=0, sticky="nsew", padx=12, pady=12)
+        left = self.left
         left.grid_columnconfigure(0, weight=1)
 
-        ctk.CTkLabel(left, text="时序数据（空格/逗号/换行分隔，一列数值）", font=ctk.CTkFont(size=12)).grid(
+        ctk.CTkLabel(left, text=tr("时序数据（空格/逗号/换行分隔，一列数值）"), font=ctk.CTkFont(size=12)).grid(
             row=0, column=0, sticky="w", padx=14, pady=(8, 2))
         self.data = ctk.CTkTextbox(left, height=110, font=ctk.CTkFont(family="Consolas", size=12))
         self.data.grid(row=1, column=0, sticky="ew", padx=12, pady=(0, 6))
         self.data.insert("1.0", _sample_series())
 
-        ctk.CTkLabel(left, text="操作", font=ctk.CTkFont(size=12)).grid(
+        ctk.CTkLabel(left, text=tr("操作"), font=ctk.CTkFont(size=12)).grid(
             row=2, column=0, sticky="w", padx=14, pady=(4, 2))
         self.op = ctk.CTkOptionMenu(left, values=OPS)
         self.op.grid(row=3, column=0, sticky="ew", padx=12)
         self.op.set(OPS[1])
 
-        ctk.CTkLabel(left, text="周期（季节长度，分解用，如 4=季度 12=月度）", font=ctk.CTkFont(size=12)).grid(
+        ctk.CTkLabel(left, text=tr("周期（季节长度，分解用，如 4=季度 12=月度）"), font=ctk.CTkFont(size=12)).grid(
             row=4, column=0, sticky="w", padx=14, pady=(8, 2))
         self.period = ctk.CTkEntry(left, height=32)
         self.period.grid(row=5, column=0, sticky="ew", padx=12)
         self.period.insert(0, "4")
 
-        ctk.CTkLabel(left, text="ARIMA 阶数 p d q（空格分隔，如 1 1 1）", font=ctk.CTkFont(size=12)).grid(
+        ctk.CTkLabel(left, text=tr("ARIMA 阶数 p d q（空格分隔，如 1 1 1）"), font=ctk.CTkFont(size=12)).grid(
             row=6, column=0, sticky="w", padx=14, pady=(8, 2))
         self.order = ctk.CTkEntry(left, height=32)
         self.order.grid(row=7, column=0, sticky="ew", padx=12)
         self.order.insert(0, "1 1 1")
 
-        ctk.CTkLabel(left, text="季节阶数 P D Q（SARIMA 用，空=无季节）", font=ctk.CTkFont(size=12)).grid(
+        ctk.CTkLabel(left, text=tr("季节阶数 P D Q（SARIMA 用，空=无季节）"), font=ctk.CTkFont(size=12)).grid(
             row=8, column=0, sticky="w", padx=14, pady=(8, 2))
         self.seas = ctk.CTkEntry(left, height=32)
         self.seas.grid(row=9, column=0, sticky="ew", padx=12)
         self.seas.insert(0, "0 1 1")
 
-        ctk.CTkLabel(left, text="预测期数", font=ctk.CTkFont(size=12)).grid(
+        ctk.CTkLabel(left, text=tr("预测期数"), font=ctk.CTkFont(size=12)).grid(
             row=10, column=0, sticky="w", padx=14, pady=(8, 2))
         self.horizon = ctk.CTkEntry(left, height=32)
         self.horizon.grid(row=11, column=0, sticky="ew", padx=12)
         self.horizon.insert(0, "6")
 
-        ctk.CTkButton(left, text="⚡ 分 析", height=42, command=self._run).grid(
+        ctk.CTkButton(left, text=tr("⚡ 分 析"), height=42, command=self._run).grid(
             row=12, column=0, sticky="ew", padx=12, pady=(10, 2))
 
         tip = ("说明：\n"
@@ -90,32 +91,20 @@ class TimeSeriesPage(ctk.CTkFrame):
                "· 数据太少（< 2 个周期）分解会失败，请加长序列。")
         ctk.CTkLabel(left, text=tip, justify="left", font=ctk.CTkFont(size=11),
                      text_color="gray45", anchor="w", wraplength=360).grid(
-            row=11, column=0, sticky="w", padx=14, pady=(6, 12))
+            row=13, column=0, sticky="w", padx=14, pady=(6, 12))
 
         # ================= 右：结果 + 画布 =================
-        right = ctk.CTkFrame(self, corner_radius=12)
-        right.grid(row=0, column=1, sticky="nsew", padx=(0, 12), pady=12)
+        right = self.right
         right.grid_columnconfigure(0, weight=1)
         right.grid_rowconfigure(1, weight=1)
 
-        ctk.CTkLabel(right, text="分析结果", font=ctk.CTkFont(size=14, weight="bold")).grid(
+        ctk.CTkLabel(right, text=tr("分析结果"), font=ctk.CTkFont(size=14, weight="bold")).grid(
             row=0, column=0, sticky="w", padx=16, pady=(12, 4))
         self.out = ctk.CTkTextbox(right, font=ctk.CTkFont(family="Consolas", size=13))
         self.out.grid(row=1, column=0, sticky="nsew", padx=16, pady=(0, 4))
-
-        box = ctk.CTkFrame(right, fg_color="transparent")
-        box.grid(row=2, column=0, sticky="nsew", padx=16, pady=(4, 4))
-        box.grid_rowconfigure(0, weight=1)
-        box.grid_columnconfigure(0, weight=1)
-        self.figure = plt.Figure(figsize=(7, 4.6), dpi=100)
-        self.ax = self.figure.add_subplot(111)
-        self.canvas = FigureCanvasTkAgg(self.figure, master=box)
-        self.canvas.get_tk_widget().pack(side="top", fill="both", expand=1)
-        toolbar = NavigationToolbar2Tk(self.canvas, box)
-        toolbar.update()
-        toolbar.pack(side="bottom", fill="x")
+        box, self.figure, self.canvas, _tb = self.show_plot()
+        self.ax = self.figure.gca()
         self.ax.set_title("时序图形")
-        self.canvas.draw()
 
     def _msg(self, s):
         self.out.configure(state="normal")
@@ -280,19 +269,24 @@ class TimeSeriesPage(ctk.CTkFrame):
         self.ax.grid(True)
 
     def _auto_arima(self, y):
-        """自动定阶：网格搜索 (p,d,q)，按 AIC 最小选最优，再预测。"""
+        """自动定阶：网格搜索 (p,q)，d 用 ADF 平稳性检验定（削网格 18→9），按 AIC 最小选最优。"""
         from statsmodels.tsa.statespace.sarimax import SARIMAX
+        d = 0
+        try:
+            from statsmodels.tsa.stattools import adfuller
+            d = 1 if float(adfuller(np.asarray(y, float), autolag="AIC")[1]) > 0.05 else 0
+        except Exception:
+            d = 0
         best = None
         for p in range(3):
             for q in range(3):
-                for d in range(2):
-                    try:
-                        fit = SARIMAX(y, order=(p, d, q), enforce_stationarity=False,
-                                      enforce_invertibility=False).fit(disp=False)
-                        if best is None or fit.aic < best[0]:
-                            best = (fit.aic, (p, d, q), fit)
-                    except Exception:
-                        continue
+                try:
+                    fit = SARIMAX(y, order=(p, d, q), enforce_stationarity=False,
+                                  enforce_invertibility=False).fit(disp=False)
+                    if best is None or fit.aic < best[0]:
+                        best = (fit.aic, (p, d, q), fit)
+                except Exception:
+                    continue
         if best is None:
             raise ValueError("自动定阶失败（样本过短或序列退化）。")
         aic, o, fit = best

@@ -17,7 +17,7 @@ from modules import app_settings as _AS
 
 
 def version_line():
-    """返回形如 'MatLite v1.8.0 · numpy .., scipy .., sympy ..' 的版本说明。"""
+    """返回形如 'MatLite v1.9.0 · numpy .., scipy .., sympy ..' 的版本说明。"""
     ver = _AS.APP_VERSION
     try:
         import numpy, scipy, sympy
@@ -73,7 +73,7 @@ def build_markdown(title, kind, problem_lines, result_lines, extra=None):
 
 
 def export_recipe(parent, title, kind, problem_lines, result_lines, py_code,
-                  default_name=None, history=None):
+                  default_name=None, history=None, user=None):
     """一键导出：弹出保存框，把 .md 配方与 .py 脚本写入同一目录。
 
     params:
@@ -107,6 +107,15 @@ def export_recipe(parent, title, kind, problem_lines, result_lines, py_code,
             f.write(py_code)
         if history:
             history.log_op("可复现", title, f"导出 {os.path.basename(md_path)}")
+        # 一键收入「我的算题本」
+        try:
+            _entry = {"id": _new_entry_id(), "user": _entry_user(parent, user),
+                      "title": title, "kind": kind, "time": _now_str(),
+                      "problem": list(problem_lines or []), "result": list(result_lines or []),
+                      "md": md_path, "py": py_path, "md_text": md, "py_code": py_code}
+            add_to_problem_book(_entry)
+        except Exception:
+            pass
         messagebox.showinfo(
             "已导出",
             f"可复现工作流已导出：\n\n📘 配方：{md_path}\n🐍 脚本：{py_path}\n\n"
@@ -132,3 +141,95 @@ def script_header(title, kind):
 def safe_env():
     """返回一个可被 eval 使用的受限命名空间（含常用数学函数），供生成的脚本内联。"""
     return None
+
+
+
+# ============================================================
+# 「我的算题本」持久化存储
+# ============================================================
+
+import json as _json
+import uuid as _uuid
+from datetime import datetime as _dt
+
+
+def _now_str():
+    return _dt.now().strftime("%Y-%m-%d %H:%M:%S")
+
+
+def _new_entry_id():
+    return _dt.now().strftime("%Y%m%d%H%M%S") + "_" + _uuid.uuid4().hex[:6]
+
+
+def _pb_path():
+    base = os.environ.get("APPDATA") or os.path.expanduser("~")
+    d = os.path.join(base, "MatLite")
+    os.makedirs(d, exist_ok=True)
+    return os.path.join(d, "problembook.json")
+
+
+def _load_pb():
+    try:
+        with open(_pb_path(), "r", encoding="utf-8") as f:
+            return _json.load(f)
+    except Exception:
+        return {"entries": []}
+
+
+def _save_pb(doc):
+    path = _pb_path()
+    import tempfile, shutil
+    try:
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=os.path.dirname(path),
+                                         prefix="pb_", suffix=".tmp", delete=False) as tf:
+            _json.dump(doc, tf, ensure_ascii=False, indent=2)
+            tmp = tf.name
+        shutil.move(tmp, path)
+    except Exception:
+        pass
+
+
+def _entry_user(parent, user=None):
+    if user:
+        return user
+    acct = getattr(parent, "account", None)
+    if acct is not None:
+        try:
+            return acct.current_user or "游客"
+        except Exception:
+            return "游客"
+    return "游客"
+
+
+def add_to_problem_book(entry):
+    """把一条复现记录追加到「我的算题本」；与上一条完全重复则跳过。"""
+    doc = _load_pb()
+    entries = doc.get("entries", [])
+    if entries:
+        last = entries[-1]
+        if last.get("title") == entry.get("title") and last.get("md_text") == entry.get("md_text"):
+            return last
+    entry.setdefault("id", _new_entry_id())
+    entry.setdefault("time", _now_str())
+    entries.append(entry)
+    doc["entries"] = entries
+    _save_pb(doc)
+    return entry
+
+
+def list_problem_book(user=None, limit=500):
+    """列出算题本条目，最新在前。user 为 None 列出全部。"""
+    doc = _load_pb()
+    entries = doc.get("entries", [])
+    if user:
+        entries = [e for e in entries if e.get("user", "游客") in (user, "游客")]
+    return list(reversed(entries[-limit:]))
+
+
+def delete_problem_book_entry(entry_id):
+    """按 id 删除一条记录，返回是否删除成功。"""
+    doc = _load_pb()
+    before = len(doc.get("entries", []))
+    doc["entries"] = [e for e in doc.get("entries", []) if e.get("id") != entry_id]
+    _save_pb(doc)
+    return len(doc["entries"]) != before
